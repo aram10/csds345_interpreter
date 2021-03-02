@@ -36,7 +36,7 @@
     (cond
       ((member? var (vars state)) (error 'bad-declaration))
       (else
-       (cons (cons var (vars state)) (cons (values state) '()))))))
+       (cons (cons var (vars state)) (cons (cons '() (vals state)) '()))))))
 
     
 ; HELPER FUNCTIONS
@@ -54,7 +54,7 @@
 (define rightoperand caddr)
 
 (define vars (lambda (state) (car state)))
-(define values (lambda (state) (cadr state)))
+(define vals (lambda (state) (cadr state)))
 
 
 
