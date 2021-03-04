@@ -52,6 +52,31 @@ However, (assign 'x '7 '((y x) (10 ()))) errors because of appending issues.
       ((eq? x (firstvar (vars state))) (cons (vars state) (cons (cons v (restvals (vals state))) '())))
       (else (cons (cons x (vars (assign x v (cons (restvars (vars state)) (restvals (vals state)))))) (cons v (vals (assign x v (cons (restvars (vars state)) (restvals (vals state)))))))))))
 
+
+(define remove-cps
+  (lambda (x state return)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) (error 'bad-remove))
+      ((eq? x (firstvar (vars state))) (return (cons (restvars (vars state)) (cons (restvals (vals state)) '()))))
+      (else (remove-cps x (cons (restvars (vars state)) (cons (restvals (vals state)) '())) 
+            (lambda (s) (return (cons (cons (firstvar (vars state)) (vars s)) (cons (cons (firstval (vals state)) (vals s)) '())))))))))
+          
+(define M-compare
+  (lambda (expression)
+    (cond
+      ((boolean? expression) (M-boolean expression))
+      ((eq? (operator expression) '==) (= (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      ((eq? (operator expression) '!=) (not (= (M-integer (leftoperand expression)) (M-integer (rightoperand expression)))))
+      ((eq? (operator expression) '>=) (>= (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      ((eq? (operator expression) '<=) (<= (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      ((eq? (operator expression) '>) (> (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      ((eq? (operator expression) '<) (< (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      (else (error 'bad-comparison)))))
+
+(define remove
+  (lambda (x state) (remove-cps x state (lambda (v) v))))
+
+
     
 #| HELPER FUNCTIONS |#
 
