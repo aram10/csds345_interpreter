@@ -28,6 +28,11 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((eq? (operator expression) '!) (not (M-boolean (leftoperand expression))))
       (else (error 'bad-operator)))))
 
+; M-state
+#|
+  case =: assign x M_value(exp) M_state(exp)
+|#
+
 ; M-value: combination of M-integer and M-value
 
 ; Declares a new variable, and sets its value to null
@@ -38,25 +43,38 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       (else
        (cons (cons x (vars state)) (cons (cons '() (vals state)) '()))))))
 
+; add a new variable, and sets its value to val
+(define add
+  (lambda (x v state)
+    (cond
+      ((member? x (vars state)) (error 'bad-declaration))
+      (else
+       (cons (cons x (vars state)) (cons (cons v (vals state)) '()))))))
+
 ; Assigns a value to a variable. Errors if the variable does not exist
 #|
 DOES NOT WORK AS INTENDED. Still struggling with appending lists to lists
 
-For example, (assign 'x '5 '((x) (())))  and   (assign 'x '5 '((x y) (() 5)))  work as intended.
-However, (assign 'x '7 '((y x) (10 ()))) errors because of appending issues.
+CASES: 
+  - (= x (+ 5 3)
+  - (= x (+ y 3))
+  - (= x (= y (+ y 1)))
+  - 
+
 |#
 (define assign
   (lambda (x v state)
     (cond
-      ((or (null? (vars state)) (null? (vals state))) (error 'bad-assignment))
-      ((eq? x (firstvar (vars state))) (cons (vars state) (cons (cons v (restvals (vals state))) '())))
-      (else (cons (cons x (vars (assign x v (cons (restvars (vars state)) (restvals (vals state)))))) (cons v (vals (assign x v (cons (restvars (vars state)) (restvals (vals state)))))))))))
-
+      ((or (null? (vars state)) (null? (vals state))) state)
+      ; ((eq? x (firstvar (vars state))) (cons (vars state) (cons (cons v (restvals (vals state))) '())))
+      ; ;(else (cons (cons x (vars (assign x v (cons (restvars (vars state)) (restvals (vals state)))))) (cons v (vals (assign x v (cons (restvars (vars state)) (restvals (vals state)))))))))))
+      ; (else (assign x v (cons (restvars (vars state)) (cons (restvals (vals state)) '())))))))
+      (else (add x v (remove x state))))))
 
 (define remove-cps
   (lambda (x state return)
     (cond
-      ((or (null? (vars state)) (null? (vals state))) (error 'bad-remove))
+      ((or (null? (vars state)) (null? (vals state))) (return '(() ())))
       ((eq? x (firstvar (vars state))) (return (cons (restvars (vars state)) (cons (restvals (vals state)) '()))))
       (else (remove-cps x (cons (restvars (vars state)) (cons (restvals (vals state)) '())) 
             (lambda (s) (return (cons (cons (firstvar (vars state)) (vars s)) (cons (cons (firstval (vals state)) (vals s)) '())))))))))
