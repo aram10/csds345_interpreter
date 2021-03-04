@@ -1,5 +1,12 @@
 #lang racket
 
+#|
+NOTES
+
+state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...))
+
+|#
+
 
 (define M-integer
   (lambda (expression)
@@ -23,23 +30,27 @@
 
 ; M-value: combination of M-integer and M-value
 
-; state: list of names, list of values
-
-; ((x y z w...) (5 true 12 '()...))
-; 
-
-; Declares a value and a type, and sets its value to be null
-;THIS DOES NOT WORK: (declare 'x '(() ()))  ==>  '((x) ())
-;expected: (declare 'x '(() ()))  ==> '((x) (()))
+; Declares a new variable, and sets its value to null
 (define declare
-  (lambda (var state)
+  (lambda (x state)
     (cond
-      ((member? var (vars state)) (error 'bad-declaration))
+      ((member? x (vars state)) (error 'bad-declaration))
       (else
-       (cons (cons var (vars state)) (cons (cons '() (vals state)) '()))))))
+       (cons (cons x (vars state)) (cons (cons '() (vals state)) '()))))))
+
+; Assigns a value to a variable. Errors if the variable does not exist
+#|
+DOES NOT WORK AS INTENDED. Still struggling with appending lists to lists
+|#
+(define assign
+  (lambda (x v state)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) (error 'bad-assignment))
+      ((eq? x (firstvar (vars state))) (cons (vars state) (cons (cons v (restvals (vals state))) '())))
+      (else (cons (cons x (vars (assign x v (cons (restvars (vars state)) (restvals (vals state)))))) (cons v (vals (assign x v (cons (restvars (vars state)) (restvals (vals state)))))))))))
 
     
-; HELPER FUNCTIONS
+#| HELPER FUNCTIONS |#
 
 (define member?
   (lambda (a l)
@@ -49,12 +60,24 @@
       ((eq? a (car l)) #t)
       (else (member? a (cdr l))))))
 
+; Arithmetic/boolean expression helpers
 (define operator (lambda (expression) (car expression)))
 (define leftoperand cadr)
 (define rightoperand caddr)
 
+; Retrieve sublist of variables and sublist of values from the state, respectively
 (define vars (lambda (state) (car state)))
 (define vals (lambda (state) (cadr state)))
+
+; Retrieve the first variable of the variables sublist
+(define firstvar (lambda (vars) (car vars)))
+; Retrieve the first value of the values sublist
+(define firstval (lambda (vals) (car vals)))
+
+; Retrieve all variables except the first
+(define restvars (lambda (vars) (cdr vars)))
+; Retrieve all values expect the first
+(define restvals (lambda (vals) (cdr vals)))
 
 
 
