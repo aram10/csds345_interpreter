@@ -41,6 +41,9 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 ; Assigns a value to a variable. Errors if the variable does not exist
 #|
 DOES NOT WORK AS INTENDED. Still struggling with appending lists to lists
+
+For example, (assign 'x '5 '((x) (())))  and   (assign 'x '5 '((x y) (() 5)))  work as intended.
+However, (assign 'x '7 '((y x) (10 ()))) errors because of appending issues.
 |#
 (define assign
   (lambda (x v state)
