@@ -90,6 +90,32 @@ CASES:
       ((eq? (operator expression) '<) (< (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
       (else (error 'bad-comparison)))))
 
+#|
+  M_state(while <condition> <loop_body>):
+    // execute the side effect
+    state_cond = M_state(<condition>, state)
+
+    if M_boolean(<condition>, state_cond) is true
+        return M_state(while <condition> <loop_body>, M_state(<loop_body>, state_cond))
+    else
+        return state_cond
+  Sample tree
+  (parser "csds345_interpreter\\tests\\26.txt")
+  '((var x 0) (while (< (= x (+ x 1)) 21) (= x x)) (return x))
+|#
+
+#|
+(define M-state-while
+    (lambda (condition body state)
+        (if (M-boolean condition state)
+            (M-state-while condition body (M-state body state))
+            state
+        )
+    )
+)
+#|
+
+
 (define remove
   (lambda (x state) (remove-cps x state (lambda (v) v))))
 
