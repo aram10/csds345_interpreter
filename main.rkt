@@ -29,7 +29,13 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((eq? (operator expression) '||) (or (M-boolean (leftoperand expression) state) (M-boolean (rightoperand expression) state)))
       ((eq? (operator expression) '!) (not (M-boolean (leftoperand expression) state)))
       (else (error 'bad-operator)))))
-
+    
+(define M-value
+  (lambda (expression state)
+    (cond
+      ((arithmetic? expression) (M-integer expression state))
+      ((boolalg? expression) (M-boolean expression state))
+      (else (error 'bad-argument)))))
 
 
 ; M-state
@@ -51,7 +57,15 @@ assign statements look like this
       ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
-      (else (error 'bad-assignment))))) 
+      (else (error 'bad-assignment)))))
+
+(define M-state-declare
+  (lambda (expression state)
+    (cond
+      ((not (declare? expression)) (error 'not-a-declaration))
+      ((eq? (length expression) 2) (declare (operand expression) state))
+      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
+      (else (error 'bad-declaration)))))
       
 
 ; Declares a new variable, and sets its value to null
@@ -140,6 +154,10 @@ assign statements look like this
 (define leftoperand cadr)
 (define rightoperand caddr)
 
+; var x 5
+
+(define operand (lambda (expression) (cadr expression)))
+
 ; Retrieve sublist of variables and sublist of values from the state, respectively
 (define vars (lambda (state) (car state)))
 (define vals (lambda (state) (cadr state)))
@@ -180,6 +198,19 @@ assign statements look like this
     (if (eq? (operator expr) '=)
         #t
         #f)))
+
+(define declare?
+  (lambda (expr)
+    (if (eq? (operator expr) 'var)
+        #t
+        #t)))
+
+#|
+(define while?
+  (lambda (expr)
+    (if (eq? ( expr
+|#
+
 
 ; Checks if a given variable has been declared
 (define declared?
