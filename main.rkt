@@ -114,8 +114,16 @@ CASES:
         )
     )
 )
-#|
+|#
 
+#|
+(define M-state-if
+    (lambda (condition then-statement else-statement state)
+        (if (M-boolean condition state)
+            (M-state then-statement state)
+            (M-state else-statement state)
+        )))
+|#
 
 (define remove
   (lambda (x state) (remove-cps x state (lambda (v) v))))
