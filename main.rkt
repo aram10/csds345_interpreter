@@ -50,7 +50,8 @@ assign statements look like this
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
-      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))))) 
+      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
+      (else (error 'bad-assignment))))) 
       
 
 ; Declares a new variable, and sets its value to null
@@ -164,14 +165,14 @@ assign statements look like this
   (lambda (expr)
     (cond
       ((number? expr) #t)
-      ((or (eq? (operator expr) '+) (eq? (operator expr) '-) (eq? (operator expr) '*) (eq? (operator expr) '/) (eq? (operator expr) '%)) #t)
+      ((member? (operator expr) '(+ - * / %)) #t)
       (else #f))))
 
 (define boolalg?
   (lambda (expr)
     (cond
       ((or (eq? expr 'true) (eq? expr 'false)) #t)
-      ((or (eq? (operator expr) '&&) (eq? (operator expr) '||) (eq? (operator expr) '!)) #t)
+      ((member? (operator expr) '(&& || !)) #t)
       (else #f))))
 
 (define assign?
