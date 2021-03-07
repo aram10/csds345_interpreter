@@ -66,6 +66,8 @@ assign statements look like this
       ((eq? (length expression) 2) (declare (operand expression) state))
       ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
       (else (error 'bad-declaration)))))
+
+
       
 
 ; Declares a new variable, and sets its value to null
@@ -84,21 +86,7 @@ assign statements look like this
       (else
        (cons (cons x (vars state)) (cons (cons v (vals state)) '()))))))
 
-<<<<<<< HEAD
-; Assigns a value to a variable. Errors if the variable does not exist
-#|
-DOES NOT WORK AS INTENDED. Still struggling with appending lists to lists
-
-CASES: 
-  - (= x (+ 5 3)
-  - (= x (+ y 3))
-  - (= x (= y (+ y 1)))
-  - 
-
-|#
-=======
 ; Assigns a value to a variable
->>>>>>> 5f098e56f8527c7291ea2d5747d460fd7a835ac2
 (define assign
   (lambda (x v state)
     (cond
@@ -128,44 +116,6 @@ CASES:
       ((eq? (operator expression) '<) (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       (else (error 'bad-comparison)))))
 
-<<<<<<< HEAD
-#|
-  M_state(while <condition> <loop_body>):
-    // execute the side effect
-    state_cond = M_state(<condition>, state)
-
-    if M_boolean(<condition>, state_cond) is true
-        return M_state(while <condition> <loop_body>, M_state(<loop_body>, state_cond))
-    else
-        return state_cond
-  Sample tree
-  (parser "csds345_interpreter\\tests\\26.txt")
-  '((var x 0) (while (< (= x (+ x 1)) 21) (= x x)) (return x))
-|#
-
-#|
-(define M-state-while
-    (lambda (condition body state)
-        (if (M-boolean condition state)
-            (M-state-while condition body (M-state body state))
-            state
-        )
-    )
-)
-|#
-
-#|
-(define M-state-if
-    (lambda (condition then-statement else-statement state)
-        (if (M-boolean condition state)
-            (M-state then-statement state)
-            (M-state else-statement state)
-        )))
-|#
-
-(define remove
-  (lambda (x state) (remove-cps x state (lambda (v) v))))
-=======
 ; Returns the value of the atom
 (define M-value-atom
   (lambda (a)
@@ -173,7 +123,6 @@ CASES:
       ((null? a) '())
       ((or (number? a) (boolean? a)) a)
       (else (error 'not-an-atom)))))
->>>>>>> 5f098e56f8527c7291ea2d5747d460fd7a835ac2
 
 ; Evaluates 'true' and 'false' to respective boolean
 (define M-value-bool
