@@ -15,11 +15,40 @@
 (define M-boolean
   (lambda (expression)
     (cond
-      ((boolean? expression) expression)
-      ((eq? (operator expression) '&&) (and (M-boolean (leftoperand expression)) (M-boolean (rightoperand expression))))
-      ((eq? (operator expression) '||) (or (M-boolean (leftoperand expression)) (M-boolean (rightoperand expression))))
-      ((eq? (operator expression) '!) (not (M-boolean (leftoperand expression))))
+      ((isbool? expression) expression)
+      ((declared? expression (vars state)) (get-val expression state))
+      ((eq? (operator expression) '&&) (and (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
+      ((eq? (operator expression) '||) (or (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
+      ((eq? (operator expression) '!) (not (M-value (leftoperand expression) state)))
       (else (error 'bad-operator)))))
+
+(define M-compare
+  (lambda (expression state)
+    (cond
+      ((boolean? expression) (M-boolean expression state))
+      ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression)) state (M-integer (rightoperand expression) state)))))
+      ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      (else (error 'bad-comparison)))))
+    
+(define M-value
+  (lambda (expression state)
+    (cond
+      ((isbool? expression) expression)
+      ((arithmetic? expression) (M-integer expression state))
+      ((boolalg? expression) (M-boolean expression state))
+      ((comparison? expression) (M-compare expression state))
+      (else (error 'bad-argument)))))
+
+
+; M-state
+#|
+  case =: assign x M_value(exp) M_state(exp)
+|#
+
 
 ; M-value: combination of M-integer and M-value
 
@@ -29,7 +58,6 @@
 ; 
 
 ; Declares a value and a type, and sets its value to be null
-;THIS DOES NOT WORK: (declare 'x '(() ()))  ==>  '((x) ())
 ;expected: (declare 'x '(() ()))  ==> '((x) (()))
 (define declare
   (lambda (var state)
@@ -38,7 +66,52 @@
       (else
        (cons (cons var (vars state)) (cons (cons '() (vals state)) '()))))))
 
-    
+
+; Assigns a value to a variable
+(define assign
+  (lambda (x v state)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) state)
+      (else (add x v (remove x state))))))
+
+(define remove-cps
+  (lambda (x state return)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) (return '(() ())))
+      ((eq? x (firstvar (vars state))) (return (cons (restvars (vars state)) (cons (restvals (vals state)) '()))))
+      (else (remove-cps x (cons (restvars (vars state)) (cons (restvals (vals state)) '())) 
+            (lambda (s) (return (cons (cons (firstvar (vars state)) (vars s)) (cons (cons (firstval (vals state)) (vals s)) '())))))))))
+
+(define remove
+  (lambda (x state) (remove-cps x state (lambda (v) v))))
+          
+
+
+; Returns the value of the atom
+(define M-value-atom
+  (lambda (a)
+    (cond
+      ((null? a) '())
+      ((or (number? a) (boolean? a)) a)
+      (else (error 'not-an-atom)))))
+
+; Evaluates 'true' and 'false' to respective boolean
+(define M-value-bool
+  (lambda (b)
+    (cond
+      ((eq? b 'true) #t)
+      ((eq? b 'false) #f)
+      (else (error 'not-a-bool)))))
+
+; Returns the value in the state bound to given variable
+(define get-val
+  (lambda (x state)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) '())
+      ((eq? (firstvar (vars state)) x) (firstval (vals state)))
+      (else (get-val x (cons (restvars (vars state)) (cons (restvals (vals state)) '())))))))
+  
+
 ; HELPER FUNCTIONS
 
 (define member?
@@ -56,6 +129,96 @@
 (define vars (lambda (state) (car state)))
 (define vals (lambda (state) (cadr state)))
 
+; Retrieve the first variable of the variables sublist
+(define firstvar (lambda (vars) (car vars)))
+; Retrieve the first value of the values sublist
+(define firstval (lambda (vals) (car vals)))
+
+; Retrieve all variables except the first
+(define restvars (lambda (vars) (cdr vars)))
+; Retrieve all values expect the first
+(define restvals (lambda (vals) (cdr vals)))
+
+; Get variable from assign statement
+(define assignvar (lambda (expression) (cadr expression)))
+
+(define assignexp (lambda (expression) (caddr expression)))
+
+#| Determine types of expressions |#
+
+(define arithmetic?
+  (lambda (expr)
+    (cond
+      ((number? expr) #t)
+      ((member? (operator expr) '(+ - * / %)) #t)
+      (else #f))))
+
+(define boolalg?
+  (lambda (expr)
+    (cond
+      ((or (eq? expr 'true) (eq? expr 'false)) #t)
+      ((member? (operator expr) '(&& || !)) #t)
+      (else #f))))
+
+(define comparison?
+  (lambda (expr)
+    (if (member? (operator expr) '(== != >= > <= <))
+        #t
+        #f)))
+
+(define assign?
+  (lambda (expr)
+    (if (eq? (operator expr) '=)
+        #t
+        #f)))
+
+(define declare?
+  (lambda (expr)
+    (if (eq? (operator expr) 'var)
+        #t
+        #t)))
+
+#|
+(define while?
+  (lambda (expr)
+    (if (eq? ( expr
+|#
 
 
+; Checks if a given variable has been declared
+(define declared?
+  (lambda (x vars)
+    (cond
+      ((null? vars) #f)
+      ((not (atom? x)) #f)
+      ((eq? (firstvar vars) x) #t)
+      (else (declared? x (cdr vars))))))
+
+; (booltoname #t) ==> 'true   (booltoname #f) ==> 'false
+(define booltoname
+  (lambda (a)
+    (cond
+      ((eq? a #t) 'true)
+      ((eq? a #f) 'false)
+      (else (error 'not-a-bool)))))
+
+(define nametobool
+  (lambda (a)
+    (cond
+      ((eq? a 'true) #t)
+      ((eq? a 'false) #f)
+      (else (error 'not-a-bool)))))
+
+; Check for atomic boolean only
+(define isbool?
+  (lambda (a)
+    (cond
+      ((or (list? a) (number? a)) #f)
+      ((or (eq? a 'true) (eq? a 'false)) #t)
+      (else #f))))
+
+;checks if a construct is an atom
+(define atom?
+  (lambda (x)
+    (not (or (pair? x) (null? x)))))
 
