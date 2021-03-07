@@ -25,6 +25,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
     (cond
       ((isbool? expression) expression)
       ((declared? expression (vars state)) (get-val expression state))
+      ((comparison? expression) (M-compare expression state))
       ((eq? (operator expression) '&&) (and (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
       ((eq? (operator expression) '||) (or (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
       ((eq? (operator expression) '!) (not (M-value (leftoperand expression) state)))
@@ -50,6 +51,8 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((boolalg? expression) (M-boolean expression state))
       ((comparison? expression) (M-compare expression state))
       (else (error 'bad-argument)))))
+
+
 
 ; M-state
 #|
@@ -79,13 +82,35 @@ assign statements look like this
       ((eq? (length expression) 2) (declare (operand expression) state))
       ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
       (else (error 'bad-declaration)))))
-      
 
-; state: list of names, list of values
+(define M-state-while
+  (lambda (expression state)
+    (if (M-boolean (condition expression) state)
+      (M-state-while expression (M-state (body expression) state))
+      state)))
 
-; Declares a value and a type, and sets its value to be null
-;expected: (declare 'x '(() ()))  ==> '((x) (()))
+(define M-state-if
+  (lambda (expression state)
+    (if (nametobool (M-boolean (condition expression) state))
+      (M-state (body expression) state)
+      (M-state (else-case expression) state))))
 
+(define M-state
+  (lambda (expression state)
+    (cond 
+      ((null? expression) state)
+      ((declare? expression) (M-state-declare expression state))
+      ((assign? expression) (M-state-assign expression state))
+      ((while? expression) (M-state-while expression state))
+      ((if? expression) (M-state-if expression state))
+      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state)))
+      ; return case
+      (else error 'unsupported-statement)
+    )))
+
+
+
+; Declares a new variable, and sets its value to null
 (define declare
   (lambda (x state)
     (cond
@@ -118,15 +143,6 @@ assign statements look like this
 
 (define remove
   (lambda (x state) (remove-cps x state (lambda (v) v))))
-          
-
-; Evaluates 'true' and 'false' to respective boolean
-(define M-value-bool
-  (lambda (b)
-    (cond
-      ((eq? b 'true) #t)
-      ((eq? b 'false) #f)
-      (else (error 'not-a-bool)))))
 
 ; Returns the value of the atom
 (define M-value-atom
@@ -136,6 +152,14 @@ assign statements look like this
       ((or (number? a) (boolean? a)) a)
       (else (error 'not-an-atom)))))
 
+; Evaluates 'true' and 'false' to respective boolean
+(define M-value-bool
+  (lambda (b)
+    (cond
+      ((eq? b 'true) #t)
+      ((eq? b 'false) #f)
+      (else (error 'not-a-bool)))))
+
 ; Returns the value in the state bound to given variable
 (define get-val
   (lambda (x state)
@@ -144,9 +168,8 @@ assign statements look like this
       ((eq? (firstvar (vars state)) x) (firstval (vals state)))
       (else (get-val x (cons (restvars (vars state)) (cons (restvals (vals state)) '())))))))
   
-
-; HELPER FUNCTIONS
-
+    
+#| HELPER FUNCTIONS |#
 
 (define member?
   (lambda (a l)
@@ -161,6 +184,15 @@ assign statements look like this
 (define leftoperand cadr)
 (define rightoperand caddr)
 
+(define condition cadr)
+(define body caddr)
+
+(define else-case 
+  (lambda (expr)
+    (if (= 4 (length expr))
+      (cadddr expr)
+      '())))
+      
 ; var x 5
 
 (define operand (lambda (expression) (cadr expression)))
@@ -200,12 +232,6 @@ assign statements look like this
       ((member? (operator expr) '(&& || !)) #t)
       (else #f))))
 
-(define comparison?
-  (lambda (expr)
-    (if (member? (operator expr) '(== != >= > <= <))
-        #t
-        #f)))
-
 (define assign?
   (lambda (expr)
     (if (eq? (operator expr) '=)
@@ -216,14 +242,25 @@ assign statements look like this
   (lambda (expr)
     (if (eq? (operator expr) 'var)
         #t
-        #t)))
+        #f)))
 
-#|
-(define while?
+(define statement?
   (lambda (expr)
-    (if (eq? ( expr
-|#
+    (if (list? (operator expr))
+      #t
+      #f)))
 
+(define while?
+  (lambda (expr) (operator? expr 'while)))
+
+(define if?
+  (lambda (expr) (operator? expr 'if)))
+
+(define operator? 
+  (lambda (expr op-name)
+    (if (eq? (operator expr) op-name)
+      #t 
+      #f)))
 
 
 ; Checks if a given variable has been declared
@@ -262,5 +299,10 @@ assign statements look like this
 (define atom?
   (lambda (x)
     (not (or (pair? x) (null? x)))))
-
+    
+(define comparison?
+  (lambda (expr)
+    (if (member? (operator expr) '(== != >= > <= <))
+        #t
+        #f)))
 
