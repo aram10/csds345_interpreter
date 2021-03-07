@@ -25,17 +25,33 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
     (cond
       ((isbool? expression) expression)
       ((declared? expression (vars state)) (get-val expression state))
-      ((eq? (operator expression) '&&) (and (M-boolean (leftoperand expression) state) (M-boolean (rightoperand expression) state)))
-      ((eq? (operator expression) '||) (or (M-boolean (leftoperand expression) state) (M-boolean (rightoperand expression) state)))
-      ((eq? (operator expression) '!) (not (M-boolean (leftoperand expression) state)))
+      ((comparison? expression) (M-compare expression state))
+      ((eq? (operator expression) '&&) (and (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
+      ((eq? (operator expression) '||) (or (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
+      ((eq? (operator expression) '!) (not (M-value (leftoperand expression) state)))
       (else (error 'bad-operator)))))
+    
+(define M-compare
+  (lambda (expression state)
+    (cond
+      ((boolean? expression) (M-boolean expression state))
+      ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression)) state (M-integer (rightoperand expression) state)))))
+      ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      (else (error 'bad-comparison)))))
     
 (define M-value
   (lambda (expression state)
     (cond
+      ((isbool? expression) expression)
       ((arithmetic? expression) (M-integer expression state))
       ((boolalg? expression) (M-boolean expression state))
+      ((comparison? expression) (M-compare expression state))
       (else (error 'bad-argument)))))
+
 
 
 ; M-state
@@ -67,8 +83,32 @@ assign statements look like this
       ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
       (else (error 'bad-declaration)))))
 
+(define M-state-while
+  (lambda (expression state)
+    (if (M-boolean (condition expression) state)
+      (M-state-while expression (M-state (body expression) state))
+      state)))
 
-      
+(define M-state-if
+  (lambda (expression state)
+    (if (nametobool (M-boolean (condition expression) state))
+      (M-state (body expression) state)
+      (M-state (else-case expression) state))))
+
+(define M-state
+  (lambda (expression state)
+    (cond 
+      ((null? expression) state)
+      ((declare? expression) (M-state-declare expression state))
+      ((assign? expression) (M-state-assign expression state))
+      ((while? expression) (M-state-while expression state))
+      ((if? expression) (M-state-if expression state))
+      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state)))
+      ; return case
+      (else error 'unsupported-statement)
+    )))
+
+
 
 ; Declares a new variable, and sets its value to null
 (define declare
@@ -103,18 +143,6 @@ assign statements look like this
 
 (define remove
   (lambda (x state) (remove-cps x state (lambda (v) v))))
-          
-(define M-compare
-  (lambda (expression state)
-    (cond
-      ((boolean? expression) (M-boolean expression state))
-      ((eq? (operator expression) '==) (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '!=) (not (= (M-integer (leftoperand expression)) state (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '>=) (>= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '<=) (<= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '>) (> (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '<) (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      (else (error 'bad-comparison)))))
 
 ; Returns the value of the atom
 (define M-value-atom
@@ -156,6 +184,15 @@ assign statements look like this
 (define leftoperand cadr)
 (define rightoperand caddr)
 
+(define condition cadr)
+(define body caddr)
+
+(define else-case 
+  (lambda (expr)
+    (if (= 4 (length expr))
+      (cadddr expr)
+      '())))
+      
 ; var x 5
 
 (define operand (lambda (expression) (cadr expression)))
@@ -205,13 +242,25 @@ assign statements look like this
   (lambda (expr)
     (if (eq? (operator expr) 'var)
         #t
-        #t)))
+        #f)))
 
-#|
-(define while?
+(define statement?
   (lambda (expr)
-    (if (eq? ( expr
-|#
+    (if (list? (operator expr))
+      #t
+      #f)))
+
+(define while?
+  (lambda (expr) (operator? expr 'while)))
+
+(define if?
+  (lambda (expr) (operator? expr 'if)))
+
+(define operator? 
+  (lambda (expr op-name)
+    (if (eq? (operator expr) op-name)
+      #t 
+      #f)))
 
 
 ; Checks if a given variable has been declared
@@ -250,12 +299,10 @@ assign statements look like this
 (define atom?
   (lambda (x)
     (not (or (pair? x) (null? x)))))
-
     
-
-
-
-
-
-
+(define comparison?
+  (lambda (expr)
+    (if (member? (operator expr) '(== != >= > <= <))
+        #t
+        #f)))
 
