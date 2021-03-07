@@ -9,14 +9,15 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 
 
 (define M-integer
-  (lambda (expression)
+  (lambda (expression state)
     (cond
       ((number? expression) expression)
-      ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
-      ((eq? (operator expression) '-) (- (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
-      ((eq? (operator expression) '*) (* (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
-      ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
-      ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression)) (M-integer (rightoperand expression))))
+      ((declared? expression (vars state)) (get-val expression state))
+      ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((eq? (operator expression) '-) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((eq? (operator expression) '*) (* (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       (else (error 'bad-operator)))))
 
 (define M-boolean
@@ -28,7 +29,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((eq? (operator expression) '||) (or (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
       ((eq? (operator expression) '!) (not (M-value (leftoperand expression) state)))
       (else (error 'bad-operator)))))
-
+    
 (define M-compare
   (lambda (expression state)
     (cond
@@ -55,8 +56,30 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
   case =: assign x M_value(exp) M_state(exp)
 |#
 
+#|
+assign statements look like this
 
-; M-value: combination of M-integer and M-value
+(= var (expression))
+|#
+
+
+(define M-state-assign
+  (lambda (expression state)
+    (cond
+      ((not (assign? expression)) (error 'not-an-assignment))
+      ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
+      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
+      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
+      (else (error 'bad-assignment)))))
+
+(define M-state-declare
+  (lambda (expression state)
+    (cond
+      ((not (declare? expression)) (error 'not-a-declaration))
+      ((eq? (length expression) 2) (declare (operand expression) state))
+      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
+      (else (error 'bad-declaration)))))
+      
 
 ; state: list of names, list of values
 
@@ -78,7 +101,6 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       (else
        (cons (cons x (vars state)) (cons (cons v (vals state)) '()))))))
 
-
 ; Assigns a value to a variable
 (define assign
   (lambda (x v state)
@@ -98,6 +120,13 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
   (lambda (x state) (remove-cps x state (lambda (v) v))))
           
 
+; Evaluates 'true' and 'false' to respective boolean
+(define M-value-bool
+  (lambda (b)
+    (cond
+      ((eq? b 'true) #t)
+      ((eq? b 'false) #f)
+      (else (error 'not-a-bool)))))
 
 ; Returns the value of the atom
 (define M-value-atom
@@ -106,14 +135,6 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((null? a) '())
       ((or (number? a) (boolean? a)) a)
       (else (error 'not-an-atom)))))
-
-; Evaluates 'true' and 'false' to respective boolean
-(define M-value-bool
-  (lambda (b)
-    (cond
-      ((eq? b 'true) #t)
-      ((eq? b 'false) #f)
-      (else (error 'not-a-bool)))))
 
 ; Returns the value in the state bound to given variable
 (define get-val
@@ -125,6 +146,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
   
 
 ; HELPER FUNCTIONS
+
 
 (define member?
   (lambda (a l)
@@ -138,6 +160,10 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 (define operator (lambda (expression) (car expression)))
 (define leftoperand cadr)
 (define rightoperand caddr)
+
+; var x 5
+
+(define operand (lambda (expression) (cadr expression)))
 
 ; Retrieve sublist of variables and sublist of values from the state, respectively
 (define vars (lambda (state) (car state)))
@@ -199,6 +225,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 |#
 
 
+
 ; Checks if a given variable has been declared
 (define declared?
   (lambda (x vars)
@@ -235,4 +262,5 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 (define atom?
   (lambda (x)
     (not (or (pair? x) (null? x)))))
+
 
