@@ -1,5 +1,12 @@
 #lang racket
 
+#|
+NOTES
+
+state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...))
+
+|#
+
 
 (define M-integer
   (lambda (expression)
@@ -13,7 +20,7 @@
       (else (error 'bad-operator)))))
 
 (define M-boolean
-  (lambda (expression)
+  (lambda (expression state)
     (cond
       ((isbool? expression) expression)
       ((declared? expression (vars state)) (get-val expression state))
@@ -43,7 +50,6 @@
       ((comparison? expression) (M-compare expression state))
       (else (error 'bad-argument)))))
 
-
 ; M-state
 #|
   case =: assign x M_value(exp) M_state(exp)
@@ -54,17 +60,23 @@
 
 ; state: list of names, list of values
 
-; ((x y z w...) (5 true 12 '()...))
-; 
-
 ; Declares a value and a type, and sets its value to be null
 ;expected: (declare 'x '(() ()))  ==> '((x) (()))
+
 (define declare
-  (lambda (var state)
+  (lambda (x state)
     (cond
-      ((member? var (vars state)) (error 'bad-declaration))
+      ((member? x (vars state)) (error 'bad-declaration))
       (else
-       (cons (cons var (vars state)) (cons (cons '() (vals state)) '()))))))
+       (cons (cons x (vars state)) (cons (cons '() (vals state)) '()))))))
+
+; add a new variable, and sets its value to val
+(define add
+  (lambda (x v state)
+    (cond
+      ((member? x (vars state)) (error 'bad-declaration))
+      (else
+       (cons (cons x (vars state)) (cons (cons v (vals state)) '()))))))
 
 
 ; Assigns a value to a variable
@@ -122,10 +134,12 @@
       ((eq? a (car l)) #t)
       (else (member? a (cdr l))))))
 
+; Arithmetic/boolean expression helpers
 (define operator (lambda (expression) (car expression)))
 (define leftoperand cadr)
 (define rightoperand caddr)
 
+; Retrieve sublist of variables and sublist of values from the state, respectively
 (define vars (lambda (state) (car state)))
 (define vals (lambda (state) (cadr state)))
 
