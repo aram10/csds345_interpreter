@@ -6,6 +6,8 @@ NOTES
 state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...))
 
 |#
+(provide (all-defined-out))
+(require "simpleParser.rkt")
 
 
 (define M-integer
@@ -14,7 +16,8 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((number? expression) expression)
       ((declared? expression (vars state)) (get-val expression state))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '-) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((and (eq? (operator expression) '-) (= 3 (length expression))) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((and (eq? (operator expression) '-) (= 2 (length expression))) (* -1 (M-integer (operand expression) state)))
       ((eq? (operator expression) '*) (* (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
@@ -36,7 +39,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
     (cond
       ((boolean? expression) (M-boolean expression state))
       ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression)) state (M-integer (rightoperand expression) state)))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))))
       ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
       ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
       ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
@@ -46,6 +49,7 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
 (define M-value
   (lambda (expression state)
     (cond
+      ((declared? expression (vars state)) (get-val expression state))
       ((isbool? expression) expression)
       ((arithmetic? expression) (M-integer expression state))
       ((boolalg? expression) (M-boolean expression state))
@@ -71,6 +75,8 @@ assign statements look like this
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
+      ((declared? (assignexp expression) (vars state)) (assign (assignvar expression) (get-val (assignexp expression) state) state))
+      ((and (atom? (assignexp expression)) (not (declared? (assignexp expression) (vars state)))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
       (else (error 'bad-assignment)))))
@@ -108,7 +114,11 @@ assign statements look like this
       (else error 'unsupported-statement)
     )))
 
-
+(define return
+  (lambda (expression state)
+    (cond
+      ((null? expression) (add 'return '() state))
+      (else (add 'return (M-value (operand expression) state) state)))))
 
 ; Declares a new variable, and sets its value to null
 (define declare
