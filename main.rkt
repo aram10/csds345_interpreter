@@ -21,9 +21,14 @@ INTERPRETER
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
 
+(define createnewstate (lambda () '(()())))
+
 (define interpret
-  (lambda filename
-    (M-state (parser filename))))
+  (lambda (filename)
+    (get-val 'return
+             (call/cc
+              (lambda (k)
+                (M-state (parser filename) (createnewstate) k))))))
 
 
 #|
@@ -110,34 +115,34 @@ M-STATE EXPRESSIONS
 
 ; Evaluates the result of an if statement and updates the state accordingly
 (define M-state-if
-  (lambda (expression state)
+  (lambda (expression state return-func)
     (if (nametobool (M-boolean (condition expression) state))
-      (M-state (body expression) state)
-      (M-state (else-case expression) state))))
+      (M-state (body expression) state return-func)
+      (M-state (else-case expression) state return-func))))
 
 #|
 Entry point into all other M-state expressions: accepts an expression which may be a list of expressions, performs the
 necessary updates to the state, and evaluates to the special variable 'return, once it is declared/assigned
 |#
 (define M-state
-  (lambda (expression state)
+  (lambda (expression state return-func)
     (cond
-      ((declared? 'return (vars state)) (get-val 'return state))
+      ((declared? 'return (vars state)) (return-func state))
       ((null? expression) state)
       ((declare? expression) (M-state-declare expression state))
       ((assign? expression) (M-state-assign expression state))
-      ((while? expression) (M-state-while expression state))
-      ((if? expression) (M-state-if expression state))
+      ((while? expression) (M-state-while expression state return-func))
+      ((if? expression) (M-state-if expression state return-func))
       ((return? expression) (return expression state))
-      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state)))
+      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
       (else error 'unsupported-statement)
     )))
 
 ; Evaluates the result of a while statement and updates the state accordingly
 (define M-state-while
-  (lambda (expression state)
+  (lambda (expression state return-func)
     (if (nametobool (M-boolean (condition expression) state))
-      (M-state-while expression (M-state (body expression) state))
+      (M-state-while expression (M-state (body expression) state return-func) return-func)
       state)))
 
 
@@ -146,6 +151,19 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 M-STATE HELPER FUNCTIONS
 |#
 
+#|
+  (define sideeffect
+  (lambda (expression state)
+    (cond 
+      ((and (eq? 2 (length expression)) (assign? (operand expression))) M-state((operand expression) state))
+      ((and (eq? 3 (length expression)) (and (assign? (leftoperand expression)) (not (assign? (rightoperand expression)))))
+            (M-state(leftoperand expression) state))
+      ((and (eq? 3 (length expression)) (and (assign? (rightoperand expression)) (not (assign? (leftoperand expression)))))
+            (M-state (rightoperand expression) state))
+      ((and (eq? 3 (length expression)) (and (assign? (leftoperand expression)) (assign? (rightoperand expression))))
+            (M-state (rightoperand expression) (M-state (leftoperand expression) state)))
+      (else state))))
+|#
 ; Creates a new binding in the state with the given variable name and the given value; corresponds to a simultaneous declaration and assignment
 (define add
   (lambda (x v state)
@@ -163,11 +181,7 @@ M-STATE HELPER FUNCTIONS
 
 ; Creates a new binding in the state with the given variable name and the value '()
 (define declare
-  (lambda (x state)
-    (cond
-      ((member? x (vars state)) (error 'bad-declaration))
-      (else
-       (cons (cons x (vars state)) (cons (cons '() (vals state)) '()))))))
+  (lambda (x state) (add x '() state)))
 
 ; Entry point into remove-cps
 (define remove
@@ -177,7 +191,7 @@ M-STATE HELPER FUNCTIONS
 (define remove-cps
   (lambda (x state return)
     (cond
-      ((or (null? (vars state)) (null? (vals state))) (return '(() ())))
+      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
       ((eq? x (firstvar (vars state))) (return (cons (restvars (vars state)) (cons (restvals (vals state)) '()))))
       (else (remove-cps x (cons (restvars (vars state)) (cons (restvals (vals state)) '())) 
             (lambda (s) (return (cons (cons (firstvar (vars state)) (vars s)) (cons (cons (firstval (vals state)) (vals s)) '())))))))))
@@ -186,7 +200,7 @@ M-STATE HELPER FUNCTIONS
 (define return
   (lambda (expression state)
     (cond
-      ((null? expression) (add 'return '() state))
+      ((null? expression) (declare 'return state))
       (else (add 'return (M-value (operand expression) state) state)))))
 
 
