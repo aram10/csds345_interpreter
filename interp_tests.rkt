@@ -11,7 +11,7 @@
 (define class-tests
     (test-suite
         "Class tests"
-        (check-equal? (M-state (parser "./tests/0.txt") emptystate) 151 "Test 0")
+        (check-equal? (M-state (parser "./tests/0.txt") emptystate) 150 "Test 0")
         (check-equal? (M-state (parser "./tests/1.txt") emptystate) -4 "Test 1")
         (check-equal? (M-state (parser "./tests/2.txt") emptystate) 10 "Test 2")
         (check-equal? (M-state (parser "./tests/3.txt") emptystate) 16 "Test 3")
