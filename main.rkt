@@ -29,9 +29,9 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
       ((isbool? expression) expression)
       ((declared? expression (vars state)) (get-val expression state))
       ((comparison? expression) (M-compare expression state))
-      ((eq? (operator expression) '&&) (and (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
-      ((eq? (operator expression) '||) (or (M-value (leftoperand expression) state) (M-value (rightoperand expression) state)))
-      ((eq? (operator expression) '!) (not (M-value (leftoperand expression) state)))
+      ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (and x y))))
+      ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (or x y))))
+      ((eq? (operator expression) '!) (boolstringsingle (M-value (leftoperand expression) state) (lambda (x) (not x))))
       (else (error 'bad-operator)))))
     
 (define M-compare
@@ -76,7 +76,7 @@ assign statements look like this
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
       ((declared? (assignexp expression) (vars state)) (assign (assignvar expression) (get-val (assignexp expression) state) state))
-      ((and (atom? (assignexp expression)) (not (declared? (assignexp expression) (vars state)))) (error 'assigning-variable-not-declared))
+      ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) (vars state)))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
       (else (error 'bad-assignment)))))
@@ -91,7 +91,7 @@ assign statements look like this
 
 (define M-state-while
   (lambda (expression state)
-    (if (M-boolean (condition expression) state)
+    (if (nametobool (M-boolean (condition expression) state))
       (M-state-while expression (M-state (body expression) state))
       state)))
 
@@ -287,6 +287,15 @@ assign statements look like this
       ((eq? a 'false) #f)
       (else (error 'not-a-bool)))))
 
+;wraps the bullshit
+(define boolstringop
+  (lambda (x y f)
+    (booltoname (f (nametobool x) (nametobool y)))))
+
+;wraps the bullshit (but for single operators like not)
+(define boolstringsingle
+  (lambda (x f)
+    (booltoname (f (nametobool x)))))
 ; Check for atomic boolean only
 (define isbool?
   (lambda (a)
@@ -299,6 +308,11 @@ assign statements look like this
 (define atom?
   (lambda (x)
     (not (or (pair? x) (null? x)))))
+
+;ehcks if a construct is a variable
+(define variable?
+  (lambda (x)
+    (and (not (or (isbool? x) (number? x))) (atom? x))))
     
 (define comparison?
   (lambda (expr)
