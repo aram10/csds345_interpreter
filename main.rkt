@@ -103,14 +103,15 @@ assign statements look like this
 
 (define M-state
   (lambda (expression state)
-    (cond 
+    (cond
+      ((declared? 'return (vars state)) (get-val 'return state))
       ((null? expression) state)
       ((declare? expression) (M-state-declare expression state))
       ((assign? expression) (M-state-assign expression state))
       ((while? expression) (M-state-while expression state))
       ((if? expression) (M-state-if expression state))
+      ((return? expression) (return expression state))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state)))
-      ; return case
       (else error 'unsupported-statement)
     )))
 
@@ -243,34 +244,23 @@ assign statements look like this
       (else #f))))
 
 (define assign?
-  (lambda (expr)
-    (if (eq? (operator expr) '=)
-        #t
-        #f)))
-
+  (lambda (expr) (eq? (operator expr) '=)))
+        
 (define declare?
-  (lambda (expr)
-    (if (eq? (operator expr) 'var)
-        #t
-        #f)))
+  (lambda (expr) (eq? (operator expr) 'var)))
 
 (define statement?
-  (lambda (expr)
-    (if (list? (operator expr))
-      #t
-      #f)))
+  (lambda (expr) (list? (operator expr))))
 
 (define while?
-  (lambda (expr) (operator? expr 'while)))
+  (lambda (expr) (eq? (operator expr) 'while)))
 
 (define if?
-  (lambda (expr) (operator? expr 'if)))
+  (lambda (expr) (eq? (operator expr) 'if)))
 
-(define operator? 
-  (lambda (expr op-name)
-    (if (eq? (operator expr) op-name)
-      #t 
-      #f)))
+(define return?
+  (lambda (expr) (eq? (operator expr) 'return)))
+
 
 
 ; Checks if a given variable has been declared
