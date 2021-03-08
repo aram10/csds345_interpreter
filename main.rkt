@@ -14,7 +14,8 @@ state: ((list of names) (list of values))  e.g. ((x y z w...) (5 true 12 '()...)
   (lambda (expression state)
     (cond
       ((number? expression) expression)
-      ((declared? expression (vars state)) (get-val expression state))
+      ((assigned? expression state) (get-val expression state))
+      ((declared? expression (vars state)) (error 'value-not-found))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 3 (length expression))) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 2 (length expression))) (* -1 (M-integer (operand expression) state)))
@@ -271,6 +272,9 @@ assign statements look like this
       ((not (atom? x)) #f)
       ((eq? (firstvar vars) x) #t)
       (else (declared? x (cdr vars))))))
+
+(define assigned?
+  (lambda (x state) (and (declared? x (vars state)) (not (null? (get-val x state))))))
 
 ; (booltoname #t) ==> 'true   (booltoname #f) ==> 'false
 (define booltoname
