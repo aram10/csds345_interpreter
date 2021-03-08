@@ -14,6 +14,7 @@ Stamatis Papadopoulos
 |#
 
 
+
 #|
 INTERPRETER
 
@@ -23,7 +24,6 @@ Receives a list of statements in prefix notation from the parser, and passes the
 (define interpret
   (lambda filename
     (M-state (parser filename))))
-
 
 
 #|
@@ -55,12 +55,13 @@ M-VALUE EXPRESSIONS
       ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
       (else (error 'bad-comparison)))))
 
-; Evaluates the result of an arithmetic expression
+; Evaluates the result of an arithmetic expression   
 (define M-integer
   (lambda (expression state)
     (cond
       ((number? expression) expression)
-      ((declared? expression (vars state)) (get-val expression state))
+      ((assigned? expression state) (get-val expression state))
+      ((declared? expression (vars state)) (error 'value-not-found))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 3 (length expression))) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 2 (length expression))) (* -1 (M-integer (operand expression) state)))
@@ -298,6 +299,8 @@ STATE INTERFACING HELPER FUNCTIONS
       ((eq? (firstvar vars) x) #t)
       (else (declared? x (cdr vars))))))
 
+(define assigned?
+  (lambda (x state) (and (declared? x (vars state)) (not (null? (get-val x state))))))
 ; Returns the value in the state bound to a given variable
 (define get-val
   (lambda (x state)
