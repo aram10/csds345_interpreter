@@ -1,7 +1,7 @@
 #lang racket
 
 (provide (all-defined-out))
-(require "simpleParser.rkt")
+(require "simpleParser.rkt" "helpers.rkt")
 
 #|
 CSDS 345 Simple Language Interpreter Project
@@ -40,7 +40,7 @@ M-VALUE EXPRESSIONS
   (lambda (expression state)
     (cond
       ((isbool? expression) expression)
-      ((declared? expression (vars state)) (get-val expression state))
+      ((declared? expression state) (get-val expression state))
       ((comparison? expression) (M-compare expression state))
       ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (and x y))))
       ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (or x y))))
@@ -66,7 +66,7 @@ M-VALUE EXPRESSIONS
     (cond
       ((number? expression) expression)
       ((assigned? expression state) (get-val expression state))
-      ((declared? expression (vars state)) (error 'value-not-found))
+      ((declared? expression state) (error 'value-not-found))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 3 (length expression))) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
       ((and (eq? (operator expression) '-) (= 2 (length expression))) (* -1 (M-integer (operand expression) state)))
@@ -79,7 +79,7 @@ M-VALUE EXPRESSIONS
 (define M-value
   (lambda (expression state)
     (cond
-      ((declared? expression (vars state)) (get-val expression state))
+      ((declared? expression state) (get-val expression state))
       ((isbool? expression) expression)
       ((arithmetic? expression) (M-integer expression state))
       ((boolalg? expression) (M-boolean expression state))
@@ -97,9 +97,9 @@ M-STATE EXPRESSIONS
   (lambda (expression state)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
-      ((not (declared? (assignvar expression) (vars state))) (error 'variable-not-declared))
-      ((declared? (assignexp expression) (vars state)) (assign (assignvar expression) (get-val (assignexp expression) state) state))
-      ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) (vars state)))) (error 'assigning-variable-not-declared))
+      ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
+      ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
+      ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
       (else (error 'bad-assignment)))))
@@ -127,7 +127,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define M-state
   (lambda (expression state return-func)
     (cond
-      ((declared? 'return (vars state)) (return-func state))
+      ((declared? 'return state) (return-func state))
       ((null? expression) state)
       ((declare? expression) (M-state-declare expression state))
       ((assign? expression) (M-state-assign expression state))
@@ -170,7 +170,7 @@ M-STATE HELPER FUNCTIONS
     (cond
       ((member? x (vars state)) (error 'bad-declaration))
       (else
-       (cons (cons x (vars state)) (cons (cons v (vals state)) '()))))))
+       (cons (cons x (vars state)) (cons (cons (box v) (vals state)) '()))))))
 
 ; Updates the binding of a declared variable in the state with the given value
 (define assign
@@ -181,7 +181,7 @@ M-STATE HELPER FUNCTIONS
 
 ; Creates a new binding in the state with the given variable name and the value '()
 (define declare
-  (lambda (x state) (add x '() state)))
+  (lambda (x state) (add x (box '()) state)))
 
 ; Entry point into remove-cps
 (define remove
@@ -192,9 +192,9 @@ M-STATE HELPER FUNCTIONS
   (lambda (x state return)
     (cond
       ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
-      ((eq? x (firstvar (vars state))) (return (cons (restvars (vars state)) (cons (restvals (vals state)) '()))))
-      (else (remove-cps x (cons (restvars (vars state)) (cons (restvals (vals state)) '())) 
-            (lambda (s) (return (cons (cons (firstvar (vars state)) (vars s)) (cons (cons (firstval (vals state)) (vals s)) '())))))))))
+      ((eq? x (firstvar state)) (return (reststate state)))
+      (else (remove-cps x (reststate state)
+            (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
 
 ; Evaluates a return expression, and creates a new binding in the state with the result and the special variable name 'return
 (define return
@@ -203,200 +203,20 @@ M-STATE HELPER FUNCTIONS
       ((null? expression) (declare 'return state))
       (else (add 'return (M-value (operand expression) state) state)))))
 
-
-
-#|
-STATEMENT ANATOMY HELPERS
-|#
-
-; Retrieves the operand of a unary expression
-(define operand (lambda (expression) (cadr expression)))
-
-; Retrieves the variable from an assignment statement
-(define assignvar (lambda (expression) (cadr expression)))
-
-; Retrieves the expression to be assigned from an assignment statement
-(define assignexp (lambda (expression) (caddr expression)))
-
-; Retrieves the operator from any kind of expression
-(define operator (lambda (expression) (car expression)))
-
-; Retrieves the left operand of a binary expression 
-(define leftoperand cadr)
-
-; Retrieves the right operand of a binary expression
-(define rightoperand caddr)
-
-; Rrtrieves the condition of an if statement or a while loop
-(define condition cadr)
-
-; Retrieves the body of an if statement or a while loop
-(define body caddr)
-
-; Retrieves the 'else' portion of an if statement
-(define else-case 
-  (lambda (expr)
-    (if (= 4 (length expr))
-      (cadddr expr)
-      '())))
-
-
-
-#|
-EXPRESSION TYPE HELPERS
-|#
-
-; Determines whether an expression is arithmetic
-(define arithmetic?
-  (lambda (expr)
+(define update
+  (lambda (x v state) (update-cps x v state (lambda (q) q))))
+ 
+(define update-cps
+  (lambda (x v state return)
     (cond
-      ((number? expr) #t)
-      ((member? (operator expr) '(+ - * / %)) #t)
-      (else #f))))
-
-; Determines whether an expression is an assignment
-(define assign?
-  (lambda (expr) (eq? (operator expr) '=)))
-
-; Determines whether an expression is a boolean algebra expression
-(define boolalg?
-  (lambda (expr)
-    (cond
-      ((or (eq? expr 'true) (eq? expr 'false)) #t)
-      ((member? (operator expr) '(&& || !)) #t)
-      (else #f))))
-
-; Determines whether an expression is a comparison
-(define comparison?
-  (lambda (expr)
-    (if (member? (operator expr) '(== != >= > <= <))
-        #t
-        #f)))
-
-; Determines whether an expression is a declaration
-(define declare?
-  (lambda (expr) (eq? (operator expr) 'var)))
-
-; Determines whether an expression is an if statement
-(define if?
-  (lambda (expr) (eq? (operator expr) 'if)))
-
-; Determines whether an expression is a return statement
-(define return?
-  (lambda (expr) (eq? (operator expr) 'return)))
-
-; Determines whether an expression is any kind of statement
-(define statement?
-  (lambda (expr) (list? (operator expr))))
-
-; Checks if the given construct is a variable name
-(define variable?
-  (lambda (x)
-    (and (not (or (isbool? x) (number? x))) (atom? x))))
-
-; Determines whether an expression is a while loop
-(define while?
-  (lambda (expr) (eq? (operator expr) 'while)))
+      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
+      ((eq? x (firstvar state))
+       (begin
+         (set-box! (firstbox state) v)
+         (return state)
+       ))
+      (else (update-cps x v (reststate state)
+            (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
+      
 
 
-
-#|
-STATE INTERFACING HELPER FUNCTIONS
-|#
-
-; Checks if a given variable has been declared
-(define declared?
-  (lambda (x vars)
-    (cond
-      ((null? vars) #f)
-      ((not (atom? x)) #f)
-      ((eq? (firstvar vars) x) #t)
-      (else (declared? x (cdr vars))))))
-
-(define assigned?
-  (lambda (x state) (and (declared? x (vars state)) (not (null? (get-val x state))))))
-; Returns the value in the state bound to a given variable
-(define get-val
-  (lambda (x state)
-    (cond
-      ((or (null? (vars state)) (null? (vals state))) '())
-      ((eq? (firstvar (vars state)) x) (firstval (vals state)))
-      (else (get-val x (cons (restvars (vars state)) (cons (restvals (vals state)) '())))))))
-
-; Retrieves the first value of the values sublist of the state
-(define firstval (lambda (vals) (car vals)))
-
-; Retrieves the first variable of the variables sublist of the state
-(define firstvar (lambda (vars) (car vars)))
-
-; Retrieve all values in the state expect the first
-(define restvals (lambda (vals) (cdr vals)))
-
-; Retrieve all variables in the state except the first
-(define restvars (lambda (vars) (cdr vars)))
-
-; Retrieves sublist of values from the state
-(define vals (lambda (state) (cadr state)))
-
-; Retrieve sublist of variables from the state 
-(define vars (lambda (state) (car state)))
-
-
-
-#|
-BOOLEAN HELPER FUNCTIONS
-|#
-
-; Helper function for evaluating boolean expressions while making appropriate transformations with booltoname and nametobool
-(define boolstringop
-  (lambda (x y f)
-    (booltoname (f (nametobool x) (nametobool y)))))
-
-; Same as boolstringop, but for unary operations
-(define boolstringsingle
-  (lambda (x f)
-    (booltoname (f (nametobool x)))))
-
-; Converts booleans to the associated tokens 'true or 'false
-(define booltoname
-  (lambda (a)
-    (cond
-      ((eq? a #t) 'true)
-      ((eq? a #f) 'false)
-      (else (error 'not-a-bool)))))
-
-; Checks if the given construct is an atomic boolean
-(define isbool?
-  (lambda (a)
-    (cond
-      ((or (list? a) (number? a)) #f)
-      ((or (eq? a 'true) (eq? a 'false)) #t)
-      (else #f))))
-
-; Converts the tokens 'true and 'false to their respective boolean equivalencies
-(define nametobool
-  (lambda (a)
-    (cond
-      ((eq? a 'true) #t)
-      ((eq? a 'false) #f)
-      (else (error 'not-a-bool)))))
-
-
-
-#|
-GENERIC HELPER FUNCTIONS
-|#
-
-; Returns true if the construct is an atom, and false otherwise
-(define atom?
-  (lambda (x)
-    (not (or (pair? x) (null? x)))))
-
-; Returns true if the atom is a member of the list, and false otherwise
-(define member?
-  (lambda (a l)
-    (cond
-      ((null? a) #t)
-      ((null? l) #f)
-      ((eq? a (car l)) #t)
-      (else (member? a (cdr l))))))
