@@ -95,65 +95,53 @@ EXPRESSION TYPE HELPERS
 (define while?
   (lambda (expr) (eq? (operator expr) 'while)))
 
-(define block?
-  (lambda (expr) (eq? (operator expr) 'begin)))
-
 
 
 #|
 STATE INTERFACING HELPER FUNCTIONS
 |#
 
+
 (define assigned?
-  (lambda (x state)
-    (cond
-      ((null? state) #f)
-      ((assigned-layer? x (firstlayer state)) #t)
-      (else (assigned? x (restlayers state))))))
+  (lambda (x state) (and (declared? x state) (not (null? (get-val x state))))))
 
-(define assigned-layer?
-  (lambda (x layer)
-    (and (declared-layer? x layer) (not (null? (get-val-layer x layer))))))
-
-(define addlayer (lambda (state) (cons (createnewlayer) state)))
-
-(define removelayer (lambda (state) (restlayers state)))
+(define addlayer (lambda (env) (cons (createnewstate) env)))
 
 ; Checks if a given variable has been declared
-(define declared-layer?
-  (lambda (x layer)
-    (cond
-      ((null? (vars layer)) #f)
-      ((not (atom? x)) #f)
-      ((eq? (firstvar layer) x) #t)
-      (else (declared-layer? x (restpairs layer))))))
-
 (define declared?
   (lambda (x state)
     (cond
-(define get-val-layer
-  (lambda (x layer)
-    (cond
-      ((layernull? layer) (error 'variable-not-found))
-      ((eq? (firstvar layer) x) (firstval layer))
-      (else (get-val-layer x (restpairs layer))))))
+      ((null? (vars state)) #f)
+      ((not (atom? x)) #f)
+      ((eq? (firstvar state) x) #t)
+      (else (declared? x (restpairs state))))))
 
+(define createnewstate (lambda () '(()())))
+
+; Returns the value in the state bound to a given variable
 (define get-val
   (lambda (x state)
     (cond
-      ((declared-layer? x (firstlayer state)) (get-val-layer x (firstlayer state)))
-      (else (get-val x (restlayers state))))))
-      
-    
+      ((or (null? (vars state)) (null? (vals state))) '())
+      ((eq? (firstvar state) x) (firstval state))
+      (else (get-val x (restpairs state))))))
 
-; Retrieves the first value of the values sublist of a layer
-(define firstval (lambda (layer) (unbox (car (vals layer)))))   
+; Retrieves the first value of the values sublist of the state
+(define firstval (lambda (state) (unbox (car (vals state)))))   
 
 ; Given a variable, get its box
+
+(define get-box-layer
+  (lambda (x layer)
+    (cond
+      ((or (null? (vars layer)) (null? (vals layer))) '())
+      ((eq? (firstvar layer) x) (firstbox layer))
+      (else (get-box-layer x (restpairs layer))))))
+
 (define get-box-layer-cps
   (lambda (x layer return)
     (cond
-      ((layernull? layer) (return '()))
+      ((or (null? (vars layer)) (null? (vals layer))) (return '()))
       ((eq? (firstvar layer) x) (return (firstbox layer)))
       (else (get-box-layer-cps x (restpairs layer) return)))))
 
@@ -162,39 +150,37 @@ STATE INTERFACING HELPER FUNCTIONS
 (define get-box
   (lambda (x state return)
     (if (null? state)
-        (error 'no-box-found)
+        (return '())
         ((get-box-layer-cps x (firstlayer state)
-                        (lambda (v) (if (null? v) (get-box x (restlayers state) return) (return v))))))))
+                        (lambda (v) (if (null? v) (get-box x (restlayer state) return) (return v))))))))
       
 
 (define firstbox (lambda (layer) (car (vals layer))))
 
 (define firstlayer (lambda (state) (car state)))
 
-(define layernull? (lambda (layer) (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
+(define restlayer cdr)
 
-(define restlayers (lambda (state) (cdr state)))
-
-; Retrieves the first variable of the variables sublist of the layer
+; Retrieves the first variable of the variables sublist of the state
 (define firstvar (lambda (layer) (car (vars layer))))
 
-; Retrieves the layer without the first variable/value pair
+; Retrieves the state without the first variable/value pair
 (define restpairs
   (lambda (layer)
     (cons (restvars layer) (cons (restvals layer) '()))))
 
 ; Retrieve all values in the state expect the first
 ; THIS RETURNS BOXES NOW!!!!
-(define restvals (lambda (state) (cdr (vals state))))
+(define restvals (lambda (layer) (cdr (vals layer))))
 
 ; Retrieve all variables in the state except the first
-(define restvars (lambda (state) (cdr (vars state))))
+(define restvars (lambda (layer) (cdr (vars layer))))
 
 ; Retrieves sublist of values from the state
-(define vals (lambda (state) (cadr state)))
+(define vals (lambda (layer) (cadr layer)))
 
 ; Retrieve sublist of variables from the state 
-(define vars (lambda (state) (car state)))
+(define vars (lambda (layer) (car layer)))
 
 
 
