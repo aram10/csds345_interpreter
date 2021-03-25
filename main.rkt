@@ -135,10 +135,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((if? expression) (M-state-if expression state return-func))
       ((return? expression) (return expression state))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
-      ((block? expression))
-
-       ;removeLayer(mStateBlock(addLayer(state)))
-       
+      ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) (lambda (v) v))))
       (else error 'unsupported-statement)
     )))
 
@@ -149,7 +146,12 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       (M-state-while expression (M-state (body expression) state return-func) return-func)
       state)))
 
-
+(define M-state-block
+  (lambda (expression state return)
+    (cond
+      ((null? expression) (return state))
+      (else (M-state (firststatement expression) state (lambda (s1) (M-state-block (reststatement expression) s1 (lambda (s2) (return s2)))))))))
+    
 
 #|
 M-STATE HELPER FUNCTIONS

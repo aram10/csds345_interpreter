@@ -37,6 +37,14 @@ STATEMENT ANATOMY HELPERS
       (cadddr expr)
       '())))
 
+; Retrieves actual statements from a 'begin' expression
+(define statements (lambda (expression) (cdr expression)))
+
+; Retrieves first statement from a block of code
+(define firststatement (lambda (expression) (car expression)))
+
+; Retrieves every statement but the first from a block of code
+(define reststatement (lambda (expression) (cdr expression)))
 
 
 #|
@@ -177,7 +185,7 @@ STATE INTERFACING HELPER FUNCTIONS
     (if (null? state)
         (return '())
         (get-box-layer-cps x (firstlayer state)
-                        (lambda (v) (if (null? v) (get-box x (restlayers state) return) (return v)))))))
+                        (lambda (v) (if (null? v) (get-box-cps x (restlayers state) return) (return v)))))))
 
 (define get-box
   (lambda (x state) (get-box-cps x state (lambda (v) v))))
