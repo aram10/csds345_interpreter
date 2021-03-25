@@ -21,6 +21,8 @@ INTERPRETER
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
 
+(define createnewstate (lambda () '((()()))))
+
 (define interpret
   (lambda (filename)
     (get-val 'return
@@ -182,11 +184,7 @@ M-STATE HELPER FUNCTIONS
 ; Updates the binding of a declared variable in the state with the given value
 
 (define assign
-  (lambda (x v state)
-    (cond
-      ((null? state) (error 'variable-not-declared)) ; state-list is empty (var is not found in state)
-      ;((or (null? (vars (firstlayer state))) (null? (vals (firstlayer state)))) state); layer is eempty, continue to next layer
-      (else  (cons (firstlayer state)(assign x v (restlayers state))))))); variable in layer, update variable in layer
+  (lambda (x v state) (begin (set-box! (get-box x state) v) state)))
 
 (define update-layer
  (lambda (x v layer)

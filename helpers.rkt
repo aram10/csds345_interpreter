@@ -137,8 +137,6 @@ STATE INTERFACING HELPER FUNCTIONS
 
 (define createnewlayer (lambda () '(()())))
 
-(define createnewstate (lambda () '((()()))))
-
 ; Returns the value in the state bound to a given variable
 (define get-val
   (lambda (x state)
