@@ -135,6 +135,10 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((if? expression) (M-state-if expression state return-func))
       ((return? expression) (return expression state))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
+      ((block? expression)
+
+       ;removeLayer(mStateBlock(addLayer(state)))
+       
       (else error 'unsupported-statement)
     )))
 
@@ -168,32 +172,46 @@ M-STATE HELPER FUNCTIONS
 (define add
   (lambda (x v state)
     (cond
-      ((member? x (vars state)) (error 'bad-declaration))
-      (else
-       (cons (cons x (vars state)) (cons (cons (box v) (vals state)) '()))))))
+      ((member? x (vars (firstlayer state))) (error 'bad-declaration))
+      (else (cons (add2layer x v (firstlayer state)) (restlayers state))))))
+
+(define add2layer
+  (lambda (x v layer)
+    (cond
+      ((member? x (vars layer)) (error 'variable-exists))
+      (else (cons (cons x (vars layer)) (cons (cons (box v) (vals layer)) '()))))))
 
 ; Updates the binding of a declared variable in the state with the given value
+
 (define assign
   (lambda (x v state)
     (cond
-      ((or (null? (vars state)) (null? (vals state))) state)
-      (else (add x v (remove x state))))))
+      ((null? state) (error 'variable-not-declared)) ; state-list is empty (var is not found in state)
+      ;((or (null? (vars (firstlayer state))) (null? (vals (firstlayer state)))) state); layer is eempty, continue to next layer
+      (else  (cons (firstlayer state)(assign x v (restlayers state))))))); variable in layer, update variable in layer
+
+(define update-layer
+ (lambda (x v layer)
+   (if (eq? x (firstvar layer))
+       (set-box! (firstval layer) v)
+       (update-layer x v (restpairs layer)))))
+       
 
 ; Creates a new binding in the state with the given variable name and the value '()
 (define declare
-  (lambda (x state) (add x (box '()) state)))
+  (lambda (x state) (add x '() state)))
 
 ; Entry point into remove-cps
-(define remove
-  (lambda (x state) (remove-cps x state (lambda (v) v))))
+(define remove-layer
+  (lambda (x state) (remove-layer-cps x state (lambda (v) v))))
 
 ; Removes a binding from the state if it exists, in continuation passing style
-(define remove-cps
+(define remove-layer-cps
   (lambda (x state return)
     (cond
       ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
-      ((eq? x (firstvar state)) (return (reststate state)))
-      (else (remove-cps x (reststate state)
+      ((eq? x (firstvar state)) (return (restpairs state)))
+      (else (remove-layer-cps x (restpairs state)
             (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
 
 ; Evaluates a return expression, and creates a new binding in the state with the result and the special variable name 'return
@@ -215,8 +233,5 @@ M-STATE HELPER FUNCTIONS
          (set-box! (firstbox state) v)
          (return state)
        ))
-      (else (update-cps x v (reststate state)
+      (else (update-cps x v (restpairs state)
             (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
-      
-
-
