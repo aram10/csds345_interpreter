@@ -21,8 +21,6 @@ INTERPRETER
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
 
-(define createnewstate (lambda () '(()())))
-
 (define interpret
   (lambda (filename)
     (get-val 'return
@@ -135,7 +133,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((if? expression) (M-state-if expression state return-func))
       ((return? expression) (return expression state))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
-      ((block? expression)
+      ((block? expression))
 
        ;removeLayer(mStateBlock(addLayer(state)))
        
