@@ -46,7 +46,7 @@
               (check-equal? (add 'y 4 '((()()) ((x)(#&5)))) '(((y)(#&4)) ((x)(#&5))) "Test add empty first layer")
               (check-exn exn:fail? (lambda () (add 'y 4 '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8))))) "Test 21")
 
-              (check-equal? (get-box 'x '(((x)(#&5))) (lambda (v) v)) (box 5))
+              (check-equal? (get-box 'x '(((x)(#&5)))) (box 5))
               
   ))
               
