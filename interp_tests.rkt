@@ -41,7 +41,12 @@
 
         ; v2
         (test-case "Test 24" (check-equal? (interpret "./tests_v2/0.txt") 20))
-        
+        (test-case "Test 25" (check-equal? (interpret "./tests_v2/1.txt") 164))
+        (test-case "Test 26" (check-equal? (interpret "./tests_v2/2.txt") 32))
+        (test-case "Test 27" (check-equal? (interpret "./tests_v2/3.txt") 2))
+        (test-case "Test 28" (check-exn exn:fail? (lambda () (interpret "./tests_v2/4.txt"))))
+        (test-case "Test 28" (check-equal? (interpret "./tests_v2/5.txt") 25))
+        (test-case "Test 29" (check-equal? (interpret "./tests_v2/6.txt") 21))
 
     ))
 

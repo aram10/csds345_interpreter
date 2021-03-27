@@ -195,6 +195,19 @@ STATE INTERFACING HELPER FUNCTIONS
 
 (define firstlayer (lambda (state) (car state)))
 
+; Useful for when we are adding 'return' to the state
+(define lastlayer
+  (lambda (state)
+    (cond
+      ((null? state) (error 'bad-argument))
+      ((null? (restlayers state)) (firstlayer state))
+      (else (lastlayer (restlayers state))))))
+
+; Retrieves every layer except for the last one
+(define lastlayers
+  (lambda (state)
+    (drop-right state)))
+    
 (define layernull? (lambda (layer) (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
 
 (define restlayers cdr)

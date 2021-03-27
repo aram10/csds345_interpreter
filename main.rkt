@@ -25,10 +25,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (get-val 'return
-             (call/cc
-              (lambda (k)
-                (M-state (parser filename) (createnewstate) k))))))
+    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k)))))
 
 
 #|
@@ -127,13 +124,12 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define M-state
   (lambda (expression state return-func)
     (cond
-      ((declared? 'return state) (return-func state))
       ((null? expression) state)
+      ((return? expression) (return-func (M-value (operand expression) state)))
       ((declare? expression) (M-state-declare expression state))
       ((assign? expression) (M-state-assign expression state))
       ((while? expression) (M-state-while expression state return-func))
       ((if? expression) (M-state-if expression state return-func))
-      ((return? expression) (return expression state))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
       ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func)))
       (else error 'unsupported-statement)
