@@ -13,7 +13,6 @@ Stamatis Papadopoulos
 3/8/2021
 |#
 
-; This is Alex - I'm adding this comment to test the Discord webhook testing12345
 
 #|
 INTERPRETER
@@ -89,34 +88,6 @@ M-VALUE EXPRESSIONS
 M-STATE EXPRESSIONS
 |#
 
-; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
-(define M-state-assign
-  (lambda (expression state)
-    (cond
-      ((not (assign? expression)) (error 'not-an-assignment))
-      ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
-      ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
-      ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
-      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
-      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
-      (else (error 'bad-assignment)))))
-
-; Adds a variable with the given name and the value '() to the state
-(define M-state-declare
-  (lambda (expression state)
-    (cond
-      ((not (declare? expression)) (error 'not-a-declaration))
-      ((eq? (length expression) 2) (declare (operand expression) state))
-      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
-      (else (error 'bad-declaration)))))
-
-; Evaluates the result of an if statement and updates the state accordingly
-(define M-state-if
-  (lambda (expression state return-func)
-    (if (nametobool (M-boolean (condition expression) state))
-      (M-state (body expression) state return-func)
-      (M-state (else-case expression) state return-func))))
-
 #|
 Entry point into all other M-state expressions: accepts an expression which may be a list of expressions, performs the
 necessary updates to the state, and evaluates to the special variable 'return, once it is declared/assigned
@@ -135,61 +106,72 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       (else error 'unsupported-statement)
     )))
 
+; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
+(define M-state-assign
+  (lambda (expression state)
+    (cond
+      ((not (assign? expression)) (error 'not-an-assignment))
+      ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
+      ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
+      ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
+      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
+      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
+      (else (error 'bad-assignment)))))
+
+; Evaluates the result of executing a block of code
+(define M-state-block
+  (lambda (expression state return)
+    (cond
+      ((null? expression) state)
+      (else (M-state-block (reststatement expression) (M-state (firststatement expression) state return) return)))))
+
+; Adds a variable with the given name and the value '() to the state
+(define M-state-declare
+  (lambda (expression state)
+    (cond
+      ((not (declare? expression)) (error 'not-a-declaration))
+      ((eq? (length expression) 2) (declare (operand expression) state))
+      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
+      (else (error 'bad-declaration)))))
+
+; Evaluates the result of an if statement and updates the state accordingly
+(define M-state-if
+  (lambda (expression state return-func)
+    (if (nametobool (M-boolean (condition expression) state))
+      (M-state (body expression) state return-func)
+      (M-state (else-case expression) state return-func))))
+
+
 ; Evaluates the result of a while statement and updates the state accordingly
 (define M-state-while
   (lambda (expression state return-func)
     (if (nametobool (M-boolean (condition expression) state))
       (M-state-while expression (M-state (body expression) state return-func) return-func)
       state)))
-
-(define M-state-block
-  (lambda (expression state return)
-    (cond
-      ((null? expression) state)
-      (else (M-state-block (reststatement expression) (M-state (firststatement expression) state return) return)))))
     
 
 #|
 M-STATE HELPER FUNCTIONS
 |#
 
-#|
-  (define sideeffect
-  (lambda (expression state)
-    (cond 
-      ((and (eq? 2 (length expression)) (assign? (operand expression))) M-state((operand expression) state))
-      ((and (eq? 3 (length expression)) (and (assign? (leftoperand expression)) (not (assign? (rightoperand expression)))))
-            (M-state(leftoperand expression) state))
-      ((and (eq? 3 (length expression)) (and (assign? (rightoperand expression)) (not (assign? (leftoperand expression)))))
-            (M-state (rightoperand expression) state))
-      ((and (eq? 3 (length expression)) (and (assign? (leftoperand expression)) (assign? (rightoperand expression))))
-            (M-state (rightoperand expression) (M-state (leftoperand expression) state)))
-      (else state))))
-|#
+
 ; Creates a new binding in the state with the given variable name and the given value; corresponds to a simultaneous declaration and assignment
 (define add
   (lambda (x v state)
     (cond
       ((member? x (vars (firstlayer state))) (error 'bad-declaration))
-      (else (cons (add2layer x v (firstlayer state)) (restlayers state))))))
+      (else (cons (add-to-layer x v (firstlayer state)) (restlayers state))))))
 
-(define add2layer
+; Creates a variable binding in a particular layer of the state
+(define add-to-layer
   (lambda (x v layer)
     (cond
       ((member? x (vars layer)) (error 'variable-exists))
       (else (cons (cons x (vars layer)) (cons (cons (box v) (vals layer)) '()))))))
 
 ; Updates the binding of a declared variable in the state with the given value
-
 (define assign
   (lambda (x v state) (begin (set-box! (get-box x state) v) state)))
-
-(define update-layer
- (lambda (x v layer)
-   (if (eq? x (firstvar layer))
-       (set-box! (firstval layer) v)
-       (update-layer x v (restpairs layer)))))
-       
 
 ; Creates a new binding in the state with the given variable name and the value '()
 (define declare
@@ -215,9 +197,11 @@ M-STATE HELPER FUNCTIONS
       ((null? expression) (declare 'return state))
       (else (add 'return (M-value (operand expression) state) state)))))
 
+; Entry point into update-cps
 (define update
   (lambda (x v state) (update-cps x v state (lambda (q) q))))
- 
+
+; Updates the binding of the given variable in the state
 (define update-cps
   (lambda (x v state return)
     (cond
@@ -229,3 +213,10 @@ M-STATE HELPER FUNCTIONS
        ))
       (else (update-cps x v (restpairs state)
             (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
+
+; Updates the binding of a declared variable in a single layer of the state
+(define update-layer
+ (lambda (x v layer)
+   (if (eq? x (firstvar layer))
+       (set-box! (firstval layer) v)
+       (update-layer x v (restpairs layer)))))

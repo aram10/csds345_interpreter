@@ -6,8 +6,7 @@
 STATEMENT ANATOMY HELPERS
 |#
 
-; Retrieves the operand of a unary expression
-(define operand (lambda (expression) (cadr expression)))
+
 
 ; Retrieves the variable from an assignment statement
 (define assignvar (lambda (expression) (cadr expression)))
@@ -15,20 +14,11 @@ STATEMENT ANATOMY HELPERS
 ; Retrieves the expression to be assigned from an assignment statement
 (define assignexp (lambda (expression) (caddr expression)))
 
-; Retrieves the operator from any kind of expression
-(define operator (lambda (expression) (car expression)))
-
-; Retrieves the left operand of a binary expression 
-(define leftoperand cadr)
-
-; Retrieves the right operand of a binary expression
-(define rightoperand caddr)
+; Retrieves the body of an if statement/while loop
+(define body caddr)
 
 ; Rrtrieves the condition of an if statement or a while loop
 (define condition cadr)
-
-; Retrieves the body of an if statement or a while loop
-(define body caddr)
 
 ; Retrieves the 'else' portion of an if statement
 (define else-case 
@@ -37,14 +27,26 @@ STATEMENT ANATOMY HELPERS
       (cadddr expr)
       '())))
 
-; Retrieves actual statements from a 'begin' expression
-(define statements (lambda (expression) (cdr expression)))
-
 ; Retrieves first statement from a block of code
 (define firststatement (lambda (expression) (car expression)))
 
+; Retrieves the left operand of a binary expression 
+(define leftoperand cadr)
+
+; Retrieves the operand of a unary expression
+(define operand (lambda (expression) (cadr expression)))
+
+; Retrieves the operator from any kind of expression
+(define operator (lambda (expression) (car expression)))
+
 ; Retrieves every statement but the first from a block of code
 (define reststatement (lambda (expression) (cdr expression)))
+
+; Retrieves the right operand of a binary expression
+(define rightoperand caddr)
+
+; Retrieves actual statements from a 'begin' expression
+(define statements (lambda (expression) (cdr expression)))
 
 
 #|
@@ -62,6 +64,10 @@ EXPRESSION TYPE HELPERS
 ; Determines whether an expression is an assignment
 (define assign?
   (lambda (expr) (eq? (operator expr) '=)))
+
+; Determines whether an expression is a block of code
+(define block?
+  (lambda (expr) (eq? (operator expr) 'begin)))
 
 ; Determines whether an expression is a boolean algebra expression
 (define boolalg?
@@ -103,14 +109,31 @@ EXPRESSION TYPE HELPERS
 (define while?
   (lambda (expr) (eq? (operator expr) 'while)))
 
-(define block?
-  (lambda (expr) (eq? (operator expr) 'begin)))
-
 
 
 #|
 STATE INTERFACING HELPER FUNCTIONS
 |#
+
+; Adds a layer to the front of the state
+(define addlayer (lambda (state) (cons (createnewlayer) state)))
+
+; Checks if a given variable has been assigned a value
+(define assigned?
+  (lambda (x state)
+    (cond
+      ((null? state) #f)
+      ((assigned-layer? x (firstlayer state)) #t)
+      (else (assigned? x (restlayers state))))))
+
+; Checks if a given variable has a binding in a layer of the state
+(define assigned-layer?
+  (lambda (x layer)
+    (and (declared-layer? x layer) (not (null? (get-val-layer x layer))))))
+
+; Abstraction of a layer of the state
+(define createnewlayer (lambda () '(()())))
+
 ; Checks if a given variable has been declared
 (define declared?
   (lambda (x state)
@@ -128,22 +151,37 @@ STATE INTERFACING HELPER FUNCTIONS
       ((eq? (firstvar layer) x) #t)
       (else (declared-layer? x (restpairs layer))))))
 
-(define assigned?
-  (lambda (x state)
+; Retrives the leftmost box of a layer
+(define firstbox (lambda (layer) (car (vals layer))))
+
+; Retrieves the leftmost layer of the state
+(define firstlayer (lambda (state) (car state)))
+
+; Retrieves the first value of the values sublist of the state
+(define firstval (lambda (state) (unbox (car (vals state)))))
+
+; Retrieves the first variable of the variables sublist of the state
+(define firstvar (lambda (layer) (car (vars layer))))
+
+; Entry point into get-box-cps
+(define get-box
+  (lambda (x state) (get-box-cps x state (lambda (v) v))))
+
+; Retrives the box of a variable in the state
+(define get-box-cps
+  (lambda (x state return)
+    (if (null? state)
+        (return '())
+        (get-box-layer-cps x (firstlayer state)
+                        (lambda (v) (if (null? v) (get-box-cps x (restlayers state) return) (return v)))))))
+
+; Given a variable, get its box
+(define get-box-layer-cps
+  (lambda (x layer return)
     (cond
-      ((null? state) #f)
-      ((assigned-layer? x (firstlayer state)) #t)
-      (else (assigned? x (restlayers state))))))
-
-(define assigned-layer?
-  (lambda (x layer)
-    (and (declared-layer? x layer) (not (null? (get-val-layer x layer))))))
-
-(define addlayer (lambda (state) (cons (createnewlayer) state)))
-
-(define removelayer (lambda (state) (restlayers state)))
-
-(define createnewlayer (lambda () '(()())))
+      ((or (null? (vars layer)) (null? (vals layer))) (return '()))
+      ((eq? (firstvar layer) x) (return (firstbox layer)))
+      (else (get-box-layer-cps x (restpairs layer) return)))))
 
 ; Returns the value in the state bound to a given variable
 (define get-val
@@ -152,6 +190,7 @@ STATE INTERFACING HELPER FUNCTIONS
       ((declared-layer? x (firstlayer state)) (get-val-layer x (firstlayer state)))
       (else (get-val x (restlayers state))))))
 
+; Returns the value in a layer of the state bound to a given variable
 (define get-val-layer
   (lambda (x layer)
     (cond
@@ -159,43 +198,7 @@ STATE INTERFACING HELPER FUNCTIONS
       ((eq? (firstvar layer) x) (firstval layer))
       (else (get-val-layer x (restpairs layer))))))
 
-; Retrieves the first value of the values sublist of the state
-(define firstval (lambda (state) (unbox (car (vals state)))))   
-
-; Given a variable, get its box
-
-(define get-box-layer
-  (lambda (x layer)
-    (cond
-      ((or (null? (vars layer)) (null? (vals layer))) '())
-      ((eq? (firstvar layer) x) (firstbox layer))
-      (else (get-box-layer x (restpairs layer))))))
-
-(define get-box-layer-cps
-  (lambda (x layer return)
-    (cond
-      ((or (null? (vars layer)) (null? (vals layer))) (return '()))
-      ((eq? (firstvar layer) x) (return (firstbox layer)))
-      (else (get-box-layer-cps x (restpairs layer) return)))))
-
-
-; state-> (((x y) (5 6)) ((z) (10))) -> ((()()) state2) -> '()
-(define get-box-cps
-  (lambda (x state return)
-    (if (null? state)
-        (return '())
-        (get-box-layer-cps x (firstlayer state)
-                        (lambda (v) (if (null? v) (get-box-cps x (restlayers state) return) (return v)))))))
-
-(define get-box
-  (lambda (x state) (get-box-cps x state (lambda (v) v))))
-      
-
-(define firstbox (lambda (layer) (car (vals layer))))
-
-(define firstlayer (lambda (state) (car state)))
-
-; Useful for when we are adding 'return' to the state
+; Retrieves the last layer of the state
 (define lastlayer
   (lambda (state)
     (cond
@@ -203,24 +206,28 @@ STATE INTERFACING HELPER FUNCTIONS
       ((null? (restlayers state)) (firstlayer state))
       (else (lastlayer (restlayers state))))))
 
-; Retrieves every layer except for the last one
+; Retrieves every layer of the state, save the rightmost one
 (define lastlayers
   (lambda (state)
     (drop-right state)))
-    
-(define layernull? (lambda (layer) (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
 
-(define restlayers cdr)
+; Checks if a layer of the state is empty
+(define layernull?
+  (lambda (layer)
+    (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
 
-; Retrieves the first variable of the variables sublist of the state
-(define firstvar (lambda (layer) (car (vars layer))))
+; Removes the frontmost layer from the state
+(define removelayer (lambda (state) (restlayers state)))
+
+; Retrieves the tail of the state
+(define restlayers (lambda (state) (cdr state)))
 
 ; Retrieves the state without the first variable/value pair
 (define restpairs
   (lambda (layer)
     (cons (restvars layer) (cons (restvals layer) '()))))
 
-; Retrieve all values in the state expect the first
+; Retrieves all values in the state expect the first
 ; THIS RETURNS BOXES NOW!!!!
 (define restvals (lambda (layer) (cdr (vals layer))))
 
