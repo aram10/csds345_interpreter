@@ -48,6 +48,17 @@ STATEMENT ANATOMY HELPERS
 ; Retrieves actual statements from a 'begin' expression
 (define statements (lambda (expression) (cdr expression)))
 
+;(try <tryblock> (catch (e) <catchblock>) (finally <finallyblock>))
+(define tryblock (lambda (expression) (cadr expression)))
+
+(define caddy (lambda (expression) (caddr expression)))
+
+(define catchblock (lambda (expression) (caddr expression)))
+
+(define finny (lambda (expression) (cadddr expression)))
+
+(define finallyblock (lambda (finny) (cadr finny)))
+
 
 #|
 EXPRESSION TYPE HELPERS
@@ -69,6 +80,11 @@ EXPRESSION TYPE HELPERS
 (define block?
   (lambda (expr) (eq? (operator expr) 'begin)))
 
+(define break?
+  (lambda (expr) (eq? (operator expr) 'break)))
+
+(define continue?
+  (lambda (expr) (eq? (operator expr) 'continue)))
 ; Determines whether an expression is a boolean algebra expression
 (define boolalg?
   (lambda (expr)
@@ -99,6 +115,9 @@ EXPRESSION TYPE HELPERS
 ; Determines whether an expression is any kind of statement
 (define statement?
   (lambda (expr) (list? (operator expr))))
+
+(define trycatch?
+  (lambda (expr) (eq? (operator expr) 'try)))
 
 ; Checks if the given construct is a variable name
 (define variable?

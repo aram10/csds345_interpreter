@@ -1,0 +1,18 @@
+var i = 0;
+var j = 0;
+var k = 0;
+var iter = 0;
+		
+while(i < 10)
+{
+	iter = iter + 1;
+	i = i + 1;
+	while(j < 10)
+	{
+		j = j + 1;
+		continue;
+		k = k + 1;
+	}
+	i = i + 1;
+}
+return i + j + k + iter;
