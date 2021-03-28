@@ -80,6 +80,11 @@ EXPRESSION TYPE HELPERS
 (define block?
   (lambda (expr) (eq? (operator expr) 'begin)))
 
+(define break?
+  (lambda (expr) (eq? (operator expr) 'break)))
+
+(define continue?
+  (lambda (expr) (eq? (operator expr) 'continue)))
 ; Determines whether an expression is a boolean algebra expression
 (define boolalg?
   (lambda (expr)
