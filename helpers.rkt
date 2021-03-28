@@ -53,11 +53,11 @@ STATEMENT ANATOMY HELPERS
 
 (define caddy (lambda (expression) (caddr expression)))
 
-(define catchblock (lambda (caddy) (caddr expression)))
+(define catchblock (lambda (expression) (caddr expression)))
 
 (define finny (lambda (expression) (cadddr expression)))
 
-(define finallyblock (lambda (finny) (cadr expression)))
+(define finallyblock (lambda (finny) (cadr finny)))
 
 
 #|

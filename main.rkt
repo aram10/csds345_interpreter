@@ -24,7 +24,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k)))))
+    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v))))))
 
 
 #|
@@ -93,16 +93,17 @@ Entry point into all other M-state expressions: accepts an expression which may 
 necessary updates to the state, and evaluates to the special variable 'return, once it is declared/assigned
 |#
 (define M-state
-  (lambda (expression state return-func)
+  (lambda (expression state return-func next break throw)
     (cond
-      ((null? expression) state)
+      ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state)))
-      ((declare? expression) (M-state-declare expression state))
-      ((assign? expression) (M-state-assign expression state))
-      ((while? expression) (M-state-while expression state return-func))
-      ((if? expression) (M-state-if expression state return-func))
-      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func) return-func))
-      ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func)))
+      ((declare? expression) (next (M-state-declare expression state)))
+      ((assign? expression) (next (M-state-assign expression state)))
+      ; expression state return-func next break throw
+      ((while? expression) (call/cc (lambda (k) (M-state-while expression state return-func next k throw))))
+      ((if? expression) (M-state-if expression state return-func next break throw))
+      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func next break throw) return-func next break throw))
+      ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break throw)))
       (else error 'unsupported-statement)
     )))
 
@@ -120,10 +121,10 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; Evaluates the result of executing a block of code
 (define M-state-block
-  (lambda (expression state return)
+  (lambda (expression state return next break throw)
     (cond
-      ((null? expression) state)
-      (else (M-state-block (reststatement expression) (M-state (firststatement expression) state return) return)))))
+      ((null? expression) (next state))
+      (else (M-state (firststatement expression) state return (lambda (s) (M-state-block (reststatement expression) s return next break throw)) break throw)))))
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
@@ -136,18 +137,25 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; Evaluates the result of an if statement and updates the state accordingly
 (define M-state-if
-  (lambda (expression state return-func)
+  (lambda (expression state return-func next break throw)
     (if (nametobool (M-boolean (condition expression) state))
-      (M-state (body expression) state return-func)
-      (M-state (else-case expression) state return-func))))
+      ; (M-state (body expression) state return-func)
+      ; (M-state (else-case expression) state return-func))))
+      (M-state (body expression) state return-func next break throw)
+      (M-state (else-case expression) state return-func next break throw))))
 
 
 ; Evaluates the result of a while statement and updates the state accordingly
 (define M-state-while
-  (lambda (expression state return-func)
+  (lambda (expression state return-func next break throw)
     (if (nametobool (M-boolean (condition expression) state))
-      (M-state-while expression (M-state (body expression) state return-func) return-func)
-      state)))
+      ; (M-state-while expression (M-state (body expression) state next) next)
+      ; state)))
+      (M-state (body expression) state return-func 
+            (lambda (s1) (M-state-while expression s1 return-func next break throw)) break throw)
+      (next state))))
+
+; start of file -> next := identity -> process block -> (next state) -> 
 
 (define M-state-try-catch-finally
   (lambda (expression) -1)) 
