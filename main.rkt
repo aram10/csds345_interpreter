@@ -148,6 +148,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
     (if (nametobool (M-boolean (condition expression) state))
       (M-state-while expression (M-state (body expression) state return-func) return-func)
       state)))
+
+(define M-state-try-catch-finally
+  (lambda (expression) -1)) 
+    
+    
     
 
 #|
