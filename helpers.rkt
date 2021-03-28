@@ -53,11 +53,21 @@ STATEMENT ANATOMY HELPERS
 
 (define caddy (lambda (expression) (caddr expression)))
 
-(define catchblock (lambda (expression) (caddr expression)))
+(define catchblock (lambda (expression) (caddr(caddy expression))))
 
-(define finny (lambda (expression) (cadddr expression)))
+(define catchvar (lambda (expression) (car (cadr (caddy expression)))))
 
-(define finallyblock (lambda (finny) (cadr finny)))
+
+
+(define finny (lambda (expression) (cdddr expression)))
+
+(define finallyblock
+  (lambda (expression)
+    (if (hasfinally? expression)
+        (cadr (car (finny expression)))
+        '())))
+
+(define throwvalue (lambda (expression) (operand expression)))
 
 
 #|
@@ -104,6 +114,10 @@ EXPRESSION TYPE HELPERS
 (define declare?
   (lambda (expr) (eq? (operator expr) 'var)))
 
+(define hasfinally?
+  (lambda (expr) (not (null? (finny expr)))))
+    
+
 ; Determines whether an expression is an if statement
 (define if?
   (lambda (expr) (eq? (operator expr) 'if)))
@@ -118,6 +132,9 @@ EXPRESSION TYPE HELPERS
 
 (define trycatch?
   (lambda (expr) (eq? (operator expr) 'try)))
+
+(define throw?
+  (lambda (expr) (eq? (operator expr) 'throw)))
 
 ; Checks if the given construct is a variable name
 (define variable?

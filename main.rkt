@@ -24,7 +24,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (v) v))))))
+    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) v))))))
 
 
 #|
@@ -97,13 +97,15 @@ necessary updates to the state, and evaluates to the special variable 'return, o
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state)))
-      ((declare? expression) (next (M-state-declare expression state)))
-      ((assign? expression) (next (M-state-assign expression state)))
+      ((declare? expression) (M-state-declare expression state return-func next break continue throw))
+      ((assign? expression) (M-state-assign expression state return-func next break continue throw))
       ; expression state return-func next break throw
       ((while? expression) (call/cc (lambda (k) (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
       ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func next break continue throw) return-func next break continue throw))
       ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break continue throw)))
+      ((trycatch? expression) (removelayer (M-state-try-catch-finally expression (addlayer state) return-func next break continue throw))) 
+      ((throw? expression) (throw (throwvalue expression) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       (else error 'unsupported-statement)
@@ -111,7 +113,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
@@ -130,7 +132,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
@@ -158,6 +160,21 @@ necessary updates to the state, and evaluates to the special variable 'return, o
             (lambda (s) (next s))
             (lambda (s2) (M-state-while expression s2 return-func next break continue throw)) throw)
       (next state))))
+
+(define M-state-try-catch-finally
+  (lambda (expression state return-func next break continue throw)
+    (M-state (tryblock expression) state
+             (lambda (s) (M-state (finallyblock expression) s return-func return-func break continue throw))
+             (lambda (s) (M-state (finallyblock expression) s return-func next break continue throw))
+             (lambda (s) (M-state (finallyblock expression) s return-func break break continue throw))
+             (lambda (s) (M-state (finallyblock expression) s return-func continue break continue throw))
+             (lambda (e s) (M-state (catchblock expression) (add (catchvar expression) e s)
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func return-func break continue throw))
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func next break continue throw))
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func break break continue throw))
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw))
+                                     (lambda (e1 s1) (M-state (finallyblock expression) s1 return-func throw break continue throw)))))))
+    
 
 
 #|
