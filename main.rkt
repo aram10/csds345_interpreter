@@ -24,7 +24,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) v))))))
+    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))))
 
 
 #|
@@ -75,8 +75,8 @@ M-VALUE EXPRESSIONS
 (define M-value
   (lambda (expression state)
     (begin
-      (println state)
-      (println expression)
+      ;(println state)
+      ;(println expression)
     (cond
       ((declared? expression state) (get-val expression state))
       ((isbool? expression) expression)
@@ -99,6 +99,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (begin
       ;(println expression)
+      ;(println state)
       
     (cond
       ((null? expression) (next state))
@@ -109,8 +110,10 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((while? expression) (call/cc (lambda (k) (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
       ((statement? expression) (begin (M-state (car expression) state return-func (lambda (s) (M-state (cdr expression) s return-func next break continue throw)) break continue throw)))
-      ((block? expression) (begin (println state) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break continue throw))))
-      ((trycatch? expression) (removelayer (M-state-try-catch-finally expression (addlayer state) return-func next break continue throw))) 
+      ((block? expression) (begin
+                             ;(println state)
+                             (M-state-block (statements expression) (addlayer state) return-func (lambda (s) (next (removelayer s))) (lambda (s) (break (removelayer s))) (lambda (s) (continue (removelayer s))) throw)))
+      ((trycatch? expression) (M-state-try-catch-finally expression (addlayer state) return-func (lambda (s) (next (removelayer s))) (lambda (s) (break (removelayer s))) (lambda (s) (continue (removelayer s))) throw))
       ((throw? expression) (throw (throwvalue expression) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
@@ -134,7 +137,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (next state))
-      (else (M-state (firststatement expression) state return-func (lambda (s) (begin (println expression) (println s) (M-state-block (reststatement expression) s return-func next break continue throw))) break continue throw)))))
+      (else (M-state (firststatement expression) state return-func (lambda (s)
+                                                                     (begin
+                                                                       ;(println expression)
+                                                                       ;(println s)
+                                                                       (M-state-block (reststatement expression) s return-func next break continue throw))) break continue throw)))))
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
@@ -170,16 +177,27 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define M-state-try-catch-finally
   (lambda (expression state return-func next break continue throw)
     (M-state (tryblock expression) state
+             ;return-func
              (lambda (s) (M-state (finallyblock expression) s return-func return-func break continue throw))
+             ;next
              (lambda (s) (M-state (finallyblock expression) s return-func next break continue throw))
+             ;break
              (lambda (s) (M-state (finallyblock expression) s return-func break break continue throw))
+             ;continue
              (lambda (s) (M-state (finallyblock expression) s return-func continue break continue throw))
+             ;throw
              (lambda (e s) (M-state (catchblock expression) (add (catchvar expression) e s)
+                                    ;return-func
+                                    ;MAYBE change the second s1 to an s
                                      (lambda (s1) (M-state (finallyblock expression) s1 return-func return-func break continue throw))
+                                     ;next
                                      (lambda (s1) (M-state (finallyblock expression) s1 return-func next break continue throw))
+                                     ;break
                                      (lambda (s1) (M-state (finallyblock expression) s1 return-func break break continue throw))
+                                     ;continue
                                      (lambda (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw))
-                                     (lambda (e1 s1) (M-state (finallyblock expression) s1 return-func throw break continue throw)))))))
+                                     ;newThrow
+                                     (lambda (e1 s1) (M-state (finallyblock expression) s1 return-func (lambda (s2) (throw e1 s2)) break continue throw)))))))
     
 
 

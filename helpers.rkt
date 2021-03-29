@@ -115,7 +115,7 @@ EXPRESSION TYPE HELPERS
   (lambda (expr) (eq? (operator expr) 'var)))
 
 (define hasfinally?
-  (lambda (expr) (not (null? (finny expr)))))
+  (lambda (expr) (not (null? (car (finny expr))))))
     
 
 ; Determines whether an expression is an if statement

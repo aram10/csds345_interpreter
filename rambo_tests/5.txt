@@ -1,0 +1,13 @@
+var x = 0;
+var j = 1;
+
+try {
+  while (j >= 0) {
+    var i = 10;
+    j = j - 1;
+  }
+}
+catch (e2) {
+  x = x * 2;
+}
+return j;
