@@ -74,13 +74,16 @@ M-VALUE EXPRESSIONS
 ; General expression evaluater: entry point into M-compare, M-integer, M-boolean    
 (define M-value
   (lambda (expression state)
+    (begin
+      (println state)
+      (println expression)
     (cond
       ((declared? expression state) (get-val expression state))
       ((isbool? expression) expression)
       ((arithmetic? expression) (M-integer expression state))
       ((boolalg? expression) (M-boolean expression state))
       ((comparison? expression) (M-compare expression state))
-      (else (error 'bad-argument)))))
+      (else (error 'bad-argument))))))
 
 
 
@@ -94,26 +97,29 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 |#
 (define M-state
   (lambda (expression state return-func next break continue throw)
+    (begin
+      ;(println expression)
+      
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state)))
-      ((declare? expression) (M-state-declare expression state return-func next break continue throw))
-      ((assign? expression) (M-state-assign expression state return-func next break continue throw))
+      ((declare? expression) (next (M-state-declare expression state)))
+      ((assign? expression) (next (M-state-assign expression state)))
       ; expression state return-func next break throw
       ((while? expression) (call/cc (lambda (k) (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
-      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func next break continue throw) return-func next break continue throw))
-      ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break continue throw)))
+      ((statement? expression) (begin (M-state (car expression) state return-func (lambda (s) (M-state (cdr expression) s return-func next break continue throw)) break continue throw)))
+      ((block? expression) (begin (println state) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break continue throw))))
       ((trycatch? expression) (removelayer (M-state-try-catch-finally expression (addlayer state) return-func next break continue throw))) 
       ((throw? expression) (throw (throwvalue expression) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       (else error 'unsupported-statement)
-    )))
+    ))))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
-  (lambda (expression state return-func next break continue throw)
+  (lambda (expression state)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
@@ -128,11 +134,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (next state))
-      (else (M-state (firststatement expression) state return-func (lambda (s) (M-state-block (reststatement expression) s return next break continue throw)) break continue throw)))))
+      (else (M-state (firststatement expression) state return-func (lambda (s) (begin (println expression) (println s) (M-state-block (reststatement expression) s return-func next break continue throw))) break continue throw)))))
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
-  (lambda (expression state return-func next break continue throw)
+  (lambda (expression state)
     (cond
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
