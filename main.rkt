@@ -24,7 +24,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))))
+    (M-state (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
 
 
 #|
@@ -103,7 +103,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       
     (cond
       ((null? expression) (next state))
-      ((return? expression) (return-func (M-value (operand expression) state)))
+      ((return? expression) (return-func (M-value (operand expression) state) state))
       ((declare? expression) (next (M-state-declare expression state)))
       ((assign? expression) (next (M-state-assign expression state)))
       ; expression state return-func next break throw
@@ -178,7 +178,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (M-state (tryblock expression) state
              ;return-func
-             (lambda (s) (M-state (finallyblock expression) s return-func return-func break continue throw))
+             (lambda (v s) (M-state (finallyblock expression) s return-func (lambda (s1) (return-func v s1)) break continue throw))
              ;next
              (lambda (s) (M-state (finallyblock expression) s return-func next break continue throw))
              ;break
@@ -189,7 +189,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
              (lambda (e s) (M-state (catchblock expression) (add (catchvar expression) e s)
                                     ;return-func
                                     ;MAYBE change the second s1 to an s
-                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func return-func break continue throw))
+                                     (lambda (v1 s1) (M-state (finallyblock expression) s1 return-func (lambda (s2) (return-func v1 s2)) break continue throw))
                                      ;next
                                      (lambda (s1) (M-state (finallyblock expression) s1 return-func next break continue throw))
                                      ;break
