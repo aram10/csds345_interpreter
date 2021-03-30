@@ -1,0 +1,64 @@
+var x = 19;
+		var y = 2;
+		var z = 99;
+		try
+		{
+			try
+			{
+				y = z - x;
+				{
+					var w = y % z * 3*x;
+					y = w / 4;
+					try
+					{
+						y = y - x;
+					}
+					catch(e)
+					{
+						if(x == y)
+						{
+							{
+								var u = 51;
+							}
+							var p = 1;
+						}
+						throw 11;
+					}
+					finally
+					{
+						x = 4 % y / 2;
+					}
+					z = z + w;
+				}
+				try
+				{
+					try
+					{
+						y = x - 4;
+						throw 96;
+					}
+					catch(e)
+					{
+						z = z / 2 * y;
+					}
+				}
+				catch(e)
+				{
+					throw 69;
+				}
+				finally
+				{
+
+				}
+			}
+			catch(e)
+			{
+				while(false){}
+			}
+		}
+		catch(e)
+		{
+
+		}
+
+		return x + z % y;

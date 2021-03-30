@@ -48,25 +48,29 @@ STATEMENT ANATOMY HELPERS
 ; Retrieves actual statements from a 'begin' expression
 (define statements (lambda (expression) (cdr expression)))
 
-;(try <tryblock> (catch (e) <catchblock>) (finally <finallyblock>))
+; Retrives the try block of a try-catch-finally
 (define tryblock (lambda (expression) (cadr expression)))
 
+; Retrieves the entire 'catch' portion of try-catch-finally
 (define caddy (lambda (expression) (caddr expression)))
 
+; Retrieves the catch block of try-catch-finally
 (define catchblock (lambda (expression) (caddr(caddy expression))))
 
+; Retrieves the variable passed into the catch block
 (define catchvar (lambda (expression) (car (cadr (caddy expression)))))
 
-
-
+; Retrieves the entire 'finally' portion of try-catch-finally
 (define finny (lambda (expression) (cdddr expression)))
 
+; Retrieves the finally block of try-catch-finally
 (define finallyblock
   (lambda (expression)
     (if (hasfinally? expression)
         (cadr (car (finny expression)))
         '())))
 
+; Retrieves the expression thrown in a 'throw' statement
 (define throwvalue (lambda (expression) (operand expression)))
 
 
@@ -90,11 +94,6 @@ EXPRESSION TYPE HELPERS
 (define block?
   (lambda (expr) (eq? (operator expr) 'begin)))
 
-(define break?
-  (lambda (expr) (eq? (operator expr) 'break)))
-
-(define continue?
-  (lambda (expr) (eq? (operator expr) 'continue)))
 ; Determines whether an expression is a boolean algebra expression
 (define boolalg?
   (lambda (expr)
@@ -102,6 +101,14 @@ EXPRESSION TYPE HELPERS
       ((or (eq? expr 'true) (eq? expr 'false)) #t)
       ((member? (operator expr) '(&& || !)) #t)
       (else #f))))
+
+; Determines whether an expression is a goto for breaking out of a while loop
+(define break?
+  (lambda (expr) (eq? (operator expr) 'break)))
+
+; Determines whether an expression is a goto for continuing the while loop
+(define continue?
+  (lambda (expr) (eq? (operator expr) 'continue)))
 
 ; Determines whether an expression is a comparison
 (define comparison?
@@ -114,10 +121,10 @@ EXPRESSION TYPE HELPERS
 (define declare?
   (lambda (expr) (eq? (operator expr) 'var)))
 
+; Determined whether a try-catch-finally has a 'finally' expression
 (define hasfinally?
   (lambda (expr) (not (null? (car (finny expr))))))
     
-
 ; Determines whether an expression is an if statement
 (define if?
   (lambda (expr) (eq? (operator expr) 'if)))
@@ -130,9 +137,11 @@ EXPRESSION TYPE HELPERS
 (define statement?
   (lambda (expr) (list? (operator expr))))
 
+; Determines whether an expression is a try-catch-finally
 (define trycatch?
   (lambda (expr) (eq? (operator expr) 'try)))
 
+; Determines whether an expression is a throw statement
 (define throw?
   (lambda (expr) (eq? (operator expr) 'throw)))
 
@@ -169,6 +178,9 @@ STATE INTERFACING HELPER FUNCTIONS
 
 ; Abstraction of a layer of the state
 (define createnewlayer (lambda () '(()())))
+
+; Abstraction of the entire state
+(define createnewstate (lambda () '((()()))))
 
 ; Checks if a given variable has been declared
 (define declared?
@@ -263,8 +275,7 @@ STATE INTERFACING HELPER FUNCTIONS
   (lambda (layer)
     (cons (restvars layer) (cons (restvals layer) '()))))
 
-; Retrieves all values in the state expect the first
-; THIS RETURNS BOXES NOW!!!!
+; Retrieves all values (actually boxes) in the state expect the first
 (define restvals (lambda (layer) (cdr (vals layer))))
 
 ; Retrieve all variables in the state except the first
