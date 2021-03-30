@@ -1,0 +1,37 @@
+var i = 2;
+		var j = 3;
+		var k = 5;
+		var z = 14;
+		while(z > 0)
+		{
+			var w = 16;
+			{
+			    var y = 2;
+                            y = y * 4;
+			}
+			while(w > 0)
+			{
+				try
+				{
+					var q = w / k;
+					var r = 3;
+					if(q > r)
+					{
+						throw 1000000000;
+					}
+					else
+					{
+						break;
+					}
+				}
+				catch(e)
+				{
+					k = 2 * k;
+					i = i - 1;
+					continue;
+				}
+			}
+			z = z - 1;
+		}
+		
+		return i * j * k;

@@ -50,12 +50,21 @@
         (test-case "Test 30" (check-equal? (interpret "./tests_v2/7.txt") 6))
         (test-case "Test 31" (check-equal? (interpret "./tests_v2/8.txt") -1))
         (test-case "Test 32" (check-equal? (interpret "./tests_v2/9.txt") 789))
+        (test-case "Test 33" (check-equal? (interpret "./tests_v2/14.txt") 125))
+        (test-case "Test 34" (check-equal? (interpret "./tests_v2/15.txt") 110))
+        (test-case "Test 35" (check-equal? (interpret "./tests_v2/16.txt") 2000400))
+        (test-case "Test 36" (check-equal? (interpret "./tests_v2/17.txt") 101))
+        (test-case "Test 37" (check-exn exn:fail? (lambda () (interpret "./tests_v2/18.txt"))))
 
-        (test-case "Test " (check-equal? (interpret "./rambo_tests/1.txt") 13))
-        (test-case "Test " (check-equal? (interpret "./rambo_tests/2.txt") 5))
-        (test-case "Test " (check-equal? (interpret "./rambo_tests/3.txt") 25))
-        
-
+        ; custom
+        (test-case "Test custom_1" (check-equal? (interpret "./rambo_tests/1.txt") 13))
+        (test-case "Test custom_2" (check-equal? (interpret "./rambo_tests/2.txt") 5))
+        (test-case "Test custom_3" (check-equal? (interpret "./rambo_tests/3.txt") 25))
+        (test-case "Test custom_4" (check-equal? (interpret "./rambo_tests/4.txt") 10))
+        (test-case "Test custom_5" (check-equal? (interpret "./rambo_tests/5.txt") -1))
+        (test-case "Test custom_6" (check-equal? (interpret "./rambo_tests/6.txt") -60))
+        (test-case "Test custom_7" (check-equal? (interpret "./rambo_tests/7.txt") 30))
+        (test-case "Test custom_8" (check-equal? (interpret "./rambo_tests/8.txt") 2))
     ))
 
 (run-tests class-tests 'verbose)

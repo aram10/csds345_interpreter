@@ -7,10 +7,10 @@
 CSDS 345 Simple Language Interpreter Project
 
 Phan Trinh Ha
-Alexander Rambasek
 Stamatis Papadopoulos
+Alexander Rambasek
 
-3/8/2021
+3/29/2021
 |#
 
 
@@ -20,11 +20,9 @@ INTERPRETER
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
 
-(define createnewstate (lambda () '((()()))))
-
 (define interpret
   (lambda (filename)
-    (call/cc (lambda (k) (M-state (parser filename) (createnewstate) k (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (v) v))))))
+    (M-state (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
 
 
 #|
@@ -96,14 +94,23 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (next state))
-      ((return? expression) (return-func (M-value (operand expression) state)))
+      ((return? expression) (return-func (M-value (operand expression) state) state))
       ((declare? expression) (next (M-state-declare expression state)))
       ((assign? expression) (next (M-state-assign expression state)))
-      ; expression state return-func next break throw
-      ((while? expression) (call/cc (lambda (k) (M-state-while expression state return-func next k continue throw))))
+      ((while? expression) (call/cc (lambda (k)
+                                      (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
-      ((statement? expression) (M-state (cdr expression) (M-state (car expression) state return-func next break continue throw) return-func next break continue throw))
-      ((block? expression) (removelayer (M-state-block (statements expression) (addlayer state) return-func next break continue throw)))
+      ((statement? expression) (M-state (car expression) state return-func (lambda (s)
+                                                                             (M-state (cdr expression) s return-func next break continue throw)) break continue throw))
+      ((block? expression) (M-state-block (statements expression) (addlayer state) return-func (lambda (s)
+                                                                                                 (next (removelayer s))) (lambda (s)
+                                                                                                                           (break (removelayer s))) (lambda (s)
+                                                                                                                                                      (continue (removelayer s))) throw))
+      ((trycatch? expression) (M-state-try-catch-finally expression (addlayer state) return-func (lambda (s)
+                                                                                                   (next (removelayer s))) (lambda (s)
+                                                                                                                             (break (removelayer s))) (lambda (s)
+                                                                                                                                                        (continue (removelayer s))) throw))
+      ((throw? expression) (throw (throwvalue expression) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       (else error 'unsupported-statement)
@@ -126,7 +133,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (next state))
-      (else (M-state (firststatement expression) state return-func (lambda (s) (M-state-block (reststatement expression) s return next break continue throw)) break continue throw)))))
+      (else (M-state (firststatement expression) state return-func (lambda (s)
+                                                                     (M-state-block (reststatement expression) s return-func next break continue throw)) break continue throw)))))
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
@@ -141,18 +149,43 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define M-state-if
   (lambda (expression state return-func next break continue throw)
     (if (nametobool (M-boolean (condition expression) state))
-      ; (M-state (body expression) state return-func)
-      ; (M-state (else-case expression) state return-func))))
       (M-state (body expression) state return-func next break continue throw)
       (M-state (else-case expression) state return-func next break continue throw))))
+
+#|
+Notation:
+                    --------caddy---------      ---------finny--------
+(try <tryblock>    (catch (e) <catchblock>)    (finally <finallyblock>)   )
+|#
+(define M-state-try-catch-finally
+  (lambda (expression state return-func next break continue throw)
+    (M-state (tryblock expression) state
+             ;return-func
+             (lambda (v s) (M-state (finallyblock expression) s return-func (lambda (s1) (return-func v s1)) break continue throw))
+             ;next
+             (lambda (s) (M-state (finallyblock expression) s return-func next break continue throw))
+             ;break
+             (lambda (s) (M-state (finallyblock expression) s return-func break break continue throw))
+             ;continue
+             (lambda (s) (M-state (finallyblock expression) s return-func continue break continue throw))
+             ;throw
+             (lambda (e s) (M-state (catchblock expression) (add (catchvar expression) e s)
+                                     ;return-func
+                                     (lambda (v1 s1) (M-state (finallyblock expression) s1 return-func (lambda (s2) (return-func v1 s2)) break continue throw))
+                                     ;next
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func next break continue throw))
+                                     ;break
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func break break continue throw))
+                                     ;continue
+                                     (lambda (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw))
+                                     ;newThrow
+                                     (lambda (e1 s1) (M-state (finallyblock expression) s1 return-func (lambda (s2) (throw e1 s2)) break continue throw)))))))
 
 
 ; Evaluates the result of a while statement and updates the state accordingly
 (define M-state-while
   (lambda (expression state return-func next break continue throw)
     (if (nametobool (M-boolean (condition expression) state))
-      ; (M-state-while expression (M-state (body expression) state next) next)
-      ; state)))
       (M-state (body expression) state return-func 
             (lambda (s1) (M-state-while expression s1 return-func next break continue throw))
             (lambda (s) (next s))

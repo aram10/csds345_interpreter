@@ -1,0 +1,48 @@
+var x = 12;
+		var i = 6;
+		var j = i / 2;
+		var l = 3;
+		
+		while(x*j > 0)
+		{
+			try
+			{
+				l = 4;
+				while(l < i)
+				{
+					if(l == i / 2)
+					{
+						throw 69;
+					}
+					l = l + 1;
+					j = j - 4;
+				}
+			}
+			catch(e)
+			{
+				try
+				{
+					x = x - 6;
+					try
+					{
+						x = x / 2;
+					}
+					catch(e)
+					{
+						continue;
+					}
+				}
+				catch(e)
+				{
+					try
+					{
+						break;
+					}
+					catch(e)
+					{
+						continue;
+					}
+				}
+			}
+		}
+		return j * x;
