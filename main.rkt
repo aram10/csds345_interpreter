@@ -1,7 +1,7 @@
 #lang racket
 
 (provide (all-defined-out))
-(require "simpleParser.rkt" "helpers.rkt")
+(require "functionParser.rkt" "helpers.rkt")
 
 #|
 CSDS 345 Simple Language Interpreter Project
