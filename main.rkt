@@ -1,7 +1,7 @@
 #lang racket
 
 (provide (all-defined-out))
-(require "functionParser.rkt" "helpers.rkt")
+(require "simpleParser.rkt" "functionParser.rkt" "helpers.rkt")
 
 #|
 CSDS 345 Simple Language Interpreter Project
@@ -22,8 +22,15 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (M-state (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
+    (M-state (parser-simple filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
 
+(define interpret-w-func
+  (lambda (filename)
+    (letrec
+        ((globalstate (M-state (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
+        globalstate
+        ;(M-state '(funcall main ()) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))
+      )))
 
 #|
 M-VALUE EXPRESSIONS
@@ -31,54 +38,82 @@ M-VALUE EXPRESSIONS
 
 ; Evaluates the result of a boolean algebra expression
 (define M-boolean
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((isbool? expression) expression)
       ((declared? expression state) (get-val expression state))
-      ((comparison? expression) (M-compare expression state))
-      ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (and x y))))
-      ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state) (M-value (rightoperand expression) state) (lambda(x y) (or x y))))
-      ((eq? (operator expression) '!) (boolstringsingle (M-value (leftoperand expression) state) (lambda (x) (not x))))
+      ((comparison? expression) (M-compare expression state return-func next break continue throw))
+      ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw)
+                                                     (lambda(x y) (and x y))))
+      ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw)
+                                                     (lambda(x y) (or x y))))
+      ((eq? (operator expression) '!) (boolstringsingle (M-value (leftoperand expression) state return-func next break continue throw)
+                                                        (lambda (x) (not x))))
       (else (error 'bad-operator)))))
 
 ; Evaluates the result of a comparison between 2 arithmetic expressions
 (define M-compare
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
-      ((boolean? expression) (M-boolean expression state))
-      ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))))
-      ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
-      ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state))))
+      ((boolean? expression) (M-boolean expression state return-func next break continue throw))
+      ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                      (M-integer (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                           (M-integer (rightoperand expression) state return-func next break continue throw)))))
+      ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                       (M-integer (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                       (M-integer (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                     (M-integer (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                     (M-integer (rightoperand expression) state return-func next break continue throw))))
       (else (error 'bad-comparison)))))
 
 ; Evaluates the result of an arithmetic expression   
 (define M-integer
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((number? expression) expression)
       ((assigned? expression state) (get-val expression state))
       ((declared? expression state) (error 'value-not-found))
-      ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((and (eq? (operator expression) '-) (= 3 (length expression))) (- (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((and (eq? (operator expression) '-) (= 2 (length expression))) (* -1 (M-integer (operand expression) state)))
-      ((eq? (operator expression) '*) (* (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
-      ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression) state) (M-integer (rightoperand expression) state)))
+      ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state return-func next break continue throw)
+                                         (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((and (eq? (operator expression) '-) (= 3 (length expression)))
+       (- (M-integer (leftoperand expression) state return-func next break continue throw) (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((and (eq? (operator expression) '-) (= 2 (length expression)))
+       (* -1 (M-integer (operand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '*) (* (M-integer (leftoperand expression) state return-func next break continue throw)
+                                         (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression) state return-func next break continue throw)
+                                                 (M-integer (rightoperand expression) state return-func next break continue throw)))
       (else (error 'bad-operator)))))
 
 ; General expression evaluater: entry point into M-compare, M-integer, M-boolean    
 (define M-value
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((declared? expression state) (get-val expression state))
       ((isbool? expression) expression)
-      ((arithmetic? expression) (M-integer expression state))
-      ((boolalg? expression) (M-boolean expression state))
-      ((comparison? expression) (M-compare expression state))
+      ((arithmetic? expression) (M-integer expression state return-func next break continue throw))
+      ((boolalg? expression) (M-boolean expression state return-func next break continue throw))
+      ((comparison? expression) (M-compare expression state return-func next break continue throw))
+      ((funcall? expression) (M-value-func expression state return-func next break continue throw))
       (else (error 'bad-argument)))))
+
+
+(define M-value-func
+  (lambda (expression state return-func next break continue throw)
+    (letrec
+        ((closure (get-val (operand expression) state))
+         (fstate1 ((closure-state-function closure) state))
+         (formalparams (closure-params closure))
+         (fstate2 (-1)))
+      -1)))
 
 
 
@@ -94,9 +129,9 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (next state))
-      ((return? expression) (return-func (M-value (operand expression) state) state))
-      ((declare? expression) (next (M-state-declare expression state)))
-      ((assign? expression) (next (M-state-assign expression state)))
+      ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
+      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
+      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
       ((while? expression) (call/cc (lambda (k)
                                       (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
@@ -113,19 +148,20 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((throw? expression) (throw (throwvalue expression) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
+      ((function? expression) (next (M-state-function expression state)))
       (else error 'unsupported-statement)
     )))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
       ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
-      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state) state))
-      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state) state))
+      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw) state))
+      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw) state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code
@@ -138,17 +174,24 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
-      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state) state))
+      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state return-func next break continue throw) state))
       (else (error 'bad-declaration)))))
+
+; (( (x y fib) (#&5 #&true #&(params body lambda)) ))
+
+(define M-state-function
+  (lambda (expression state)
+    (add (funcname expression) (create-closure (params expression) (funcbody expression) state) state)))
+    
 
 ; Evaluates the result of an if statement and updates the state accordingly
 (define M-state-if
   (lambda (expression state return-func next break continue throw)
-    (if (nametobool (M-boolean (condition expression) state))
+    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw))
       (M-state (body expression) state return-func next break continue throw)
       (M-state (else-case expression) state return-func next break continue throw))))
 
@@ -185,12 +228,26 @@ Notation:
 ; Evaluates the result of a while statement and updates the state accordingly
 (define M-state-while
   (lambda (expression state return-func next break continue throw)
-    (if (nametobool (M-boolean (condition expression) state))
+    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw))
       (M-state (body expression) state return-func 
             (lambda (s1) (M-state-while expression s1 return-func next break continue throw))
             (lambda (s) (next s))
             (lambda (s2) (M-state-while expression s2 return-func next break continue throw)) throw)
       (next state))))
+
+#|
+FUNCTION STUFF
+|#
+
+(define create-bindings
+  (lambda (formalparams actualparams state fstate1 return-func next break continue throw)
+    (if (not (null? formalparams))
+        (create-bindings (cdr formalparams)
+                         (cdr actualparams)
+                         state
+                         (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
+                         return-func next break continue throw)
+        fstate1)))
 
 
 #|
@@ -220,6 +277,9 @@ M-STATE HELPER FUNCTIONS
 (define declare
   (lambda (x state) (add x '() state)))
 
+(define create-closure
+  (lambda (params body state) (cons params (cons body (cons (lambda (v) v) '())))))
+
 ; Entry point into remove-cps
 (define remove-layer
   (lambda (x state) (remove-layer-cps x state (lambda (v) v))))
@@ -234,11 +294,14 @@ M-STATE HELPER FUNCTIONS
             (lambda (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
 
 ; Evaluates a return expression, and creates a new binding in the state with the result and the special variable name 'return
+; DEPRECATED
+#|
 (define return
-  (lambda (expression state)
+  (lambda (expression state return-func next break continue throw)
     (cond
       ((null? expression) (declare 'return state))
-      (else (add 'return (M-value (operand expression) state) state)))))
+      (else (add 'return (M-value (operand expression) state return-func next break continue throw) state)))))
+|#
 
 ; Entry point into update-cps
 (define update

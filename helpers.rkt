@@ -3,6 +3,29 @@
 (provide (all-defined-out))
 
 #|
+FUNCTION ANATOMY HELPERS
+|#
+
+; (function fib (a) ((if (== a 0) (return 0) (if (== a 1) (return 1) (return (+ (funcall fib (- a 1)) (funcall fib (- a 2)))))))) (function main () ((return (funcall fib 10))))
+
+
+(define function?
+  (lambda (expression)
+    (eq? 'function (operator expression))))
+
+(define closure-state-function
+  (lambda (closure) (caddr closure)))
+
+(define closure-params
+  (lambda (closure) (car closure)))
+
+(define closure-body
+  (lambda (closure) (cadr closure)))
+
+
+
+
+#|
 STATEMENT ANATOMY HELPERS
 |#
 
@@ -30,6 +53,10 @@ STATEMENT ANATOMY HELPERS
 ; Retrieves first statement from a block of code
 (define firststatement (lambda (expression) (car expression)))
 
+(define funcbody (lambda (expression) (cadddr expression)))
+
+(define funcname (lambda (expression) (cadr expression)))
+
 ; Retrieves the left operand of a binary expression 
 (define leftoperand cadr)
 
@@ -38,6 +65,8 @@ STATEMENT ANATOMY HELPERS
 
 ; Retrieves the operator from any kind of expression
 (define operator (lambda (expression) (car expression)))
+
+(define params (lambda (expression) (caddr expression)))
 
 ; Retrieves every statement but the first from a block of code
 (define reststatement (lambda (expression) (cdr expression)))
@@ -120,6 +149,9 @@ EXPRESSION TYPE HELPERS
 ; Determines whether an expression is a declaration
 (define declare?
   (lambda (expr) (eq? (operator expr) 'var)))
+
+(define funcall?
+  (lambda (expression) (eq? (operator expression) 'funcall)))
 
 ; Determined whether a try-catch-finally has a 'finally' expression
 (define hasfinally?

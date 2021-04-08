@@ -5,6 +5,7 @@
         rackunit/gui
         "./helpers.rkt"
         "./simpleParser.rkt"
+        "./functionParser.rkt"
         "./main.rkt")
 
 (define class-tests
@@ -49,8 +50,17 @@
               (check-equal? (get-box 'x '(((x)(#&5)))) (box 5))
               
   ))
+
+(define function-tests
+  (test-suite "M-Value Tests"
+              (test-case "Single closure test"
+                         (check-equal? (create-bindings '(a) '(-1) (createnewstate) (addlayer (createnewstate))
+                                                                              (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))
+                                       '(((a)(#&-1)) (()()))))
+              ))
               
 
 (run-tests class-tests 'verbose)
 ;(test/gui class-tests)
 (run-tests main-tests 'verbose)
+(run-tests function-tests 'verbose)

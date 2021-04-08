@@ -5,6 +5,7 @@
         rackunit/gui
         "./main.rkt"
         "./simpleParser.rkt"
+        "./functionParser.rkt"
         "./helpers.rkt")
 
 (define emptystate '(()()))
