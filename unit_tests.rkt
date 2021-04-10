@@ -51,12 +51,14 @@
               
   ))
 
+
 (define function-tests
   (test-suite "M-Value Tests"
               (test-case "Single closure test"
                          (check-equal? (create-bindings '(a) '(-1) (createnewstate) (addlayer (createnewstate))
                                                                               (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))
                                        '(((a)(#&-1)) (()()))))
+              
               ))
               
 

@@ -22,6 +22,9 @@ FUNCTION ANATOMY HELPERS
 (define closure-body
   (lambda (closure) (cadr closure)))
 
+(define actualparams
+  (lambda (expression) (cddr expression)))
+
 
 
 

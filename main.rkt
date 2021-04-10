@@ -27,10 +27,9 @@ Receives a list of statements in prefix notation from the parser, and passes the
 (define interpret-w-func
   (lambda (filename)
     (letrec
-        ((globalstate (M-state (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
-        globalstate
-        ;(M-state '(funcall main ()) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))
-      )))
+        ((globalstate (M-state-init (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
+      (M-state '(funcall main ()) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
+      
 
 #|
 M-VALUE EXPRESSIONS
@@ -102,18 +101,21 @@ M-VALUE EXPRESSIONS
       ((arithmetic? expression) (M-integer expression state return-func next break continue throw))
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw))
       ((comparison? expression) (M-compare expression state return-func next break continue throw))
-      ((funcall? expression) (M-value-func expression state return-func next break continue throw))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       (else (error 'bad-argument)))))
 
+; funcall name (actualparams)
 
-(define M-value-func
+(define M-value-function
   (lambda (expression state return-func next break continue throw)
     (letrec
         ((closure (get-val (operand expression) state))
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
-         (fstate2 (-1)))
-      -1)))
+         (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
+         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next (removelayer s))) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+      )))
+         
 
 
 
@@ -149,8 +151,22 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
+      ((funcall? expression) (next (M-value-function expression state return-func next break continue throw)))
       (else error 'unsupported-statement)
     )))
+
+(define M-state-init
+  (lambda (expression state return-func next break continue throw)
+    (cond
+      ((null? expression) (next state))
+      ((statement? expression) (M-state-init (car expression) state return-func (lambda (s)
+                                                                             (M-state-init (cdr expression) s return-func next break continue throw)) break continue throw))
+      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
+      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
+      ((function? expression) (next (M-state-function expression state)))
+      (else (M-state-init (cdr expression) state return-func next break continue throw)))))
+      
+    
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
