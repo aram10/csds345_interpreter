@@ -17,7 +17,8 @@
         (test-case "Test 39" (check-equal? (interpret-w-func "./tests_v3/1.txt") 14))
         (test-case "Test 40" (check-equal? (interpret-w-func "./tests_v3/2.txt") 45))
         (test-case "Test 41" (check-equal? (interpret-w-func "./tests_v3/3.txt") 55))
-
+        (test-case "Test 42" (check-equal? (interpret-w-func "./tests_v3/4.txt") 1))
+        (test-case "Test 43" (check-equal? (interpret-w-func "./tests_v3/5.txt") 115))
     ))
 
 (run-tests class-tests 'verbose)
