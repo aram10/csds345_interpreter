@@ -40,6 +40,7 @@ M-VALUE EXPRESSIONS
   (lambda (expression state return-func next break continue throw)
     (cond
       ((isbool? expression) expression)
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((declared? expression state) (get-val expression state))
       ((comparison? expression) (M-compare expression state return-func next break continue throw))
       ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
@@ -77,6 +78,7 @@ M-VALUE EXPRESSIONS
     (cond
       ((number? expression) expression)
       ((assigned? expression state) (get-val expression state))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((declared? expression state) (error 'value-not-found))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state return-func next break continue throw)
                                          (M-integer (rightoperand expression) state return-func next break continue throw)))
