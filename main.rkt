@@ -58,6 +58,7 @@ M-VALUE EXPRESSIONS
   (lambda (expression state return-func next break continue throw)
     (cond
       ((boolean? expression) (M-boolean expression state return-func next break continue throw))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state return-func next break continue throw)
                                                       (M-integer (rightoperand expression) state return-func next break continue throw))))
       ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression) state return-func next break continue throw)
