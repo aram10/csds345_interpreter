@@ -1,0 +1,7 @@
+function two(){
+	return 2;
+}
+
+function main(){
+	return two();
+}

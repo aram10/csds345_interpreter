@@ -28,7 +28,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
   (lambda (filename)
     (letrec
         ((globalstate (M-state-init (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
-      (M-state '(funcall main ()) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
+      (M-value-function '(funcall main) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
       
 
 #|
@@ -40,6 +40,7 @@ M-VALUE EXPRESSIONS
   (lambda (expression state return-func next break continue throw)
     (cond
       ((isbool? expression) expression)
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((declared? expression state) (get-val expression state))
       ((comparison? expression) (M-compare expression state return-func next break continue throw))
       ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
@@ -77,6 +78,7 @@ M-VALUE EXPRESSIONS
     (cond
       ((number? expression) expression)
       ((assigned? expression state) (get-val expression state))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((declared? expression state) (error 'value-not-found))
       ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state return-func next break continue throw)
                                          (M-integer (rightoperand expression) state return-func next break continue throw)))
@@ -113,7 +115,7 @@ M-VALUE EXPRESSIONS
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
          (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
-         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next (removelayer s))) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next s)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
       )))
          
 
@@ -151,7 +153,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
-      ((funcall? expression) (next (M-value-function expression state return-func next break continue throw)))
+      ((funcall? expression) (M-value-function expression state (lambda (val s) (next s)) next break continue throw))
       (else error 'unsupported-statement)
     )))
 
@@ -178,6 +180,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw) state))
+      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value (assignexp expression) state return-func next break continue throw) state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code
@@ -201,7 +204,9 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 (define M-state-function
   (lambda (expression state)
-    (add (funcname expression) (create-closure (params expression) (funcbody expression) state) state)))
+    (add (funcname expression) (create-closure (funcname expression) (params expression) (funcbody expression) state) state)))
+
+
     
 
 ; Evaluates the result of an if statement and updates the state accordingly
@@ -257,13 +262,14 @@ FUNCTION STUFF
 
 (define create-bindings
   (lambda (formalparams actualparams state fstate1 return-func next break continue throw)
-    (if (not (null? formalparams))
-        (create-bindings (cdr formalparams)
-                         (cdr actualparams)
-                         state
-                         (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
-                         return-func next break continue throw)
-        fstate1)))
+    (cond
+      ((and (null? formalparams) (null? actualparams)) fstate1)
+      ((eq? (length formalparams) (length actualparams)) (create-bindings (cdr formalparams)
+                                                   (cdr actualparams)
+                                                   state
+                                                   (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
+                                                   return-func next break continue throw))
+      (else (error 'mismatch-params)))))
 
 
 #|
@@ -294,7 +300,20 @@ M-STATE HELPER FUNCTIONS
   (lambda (x state) (add x '() state)))
 
 (define create-closure
-  (lambda (params body state) (cons params (cons body (cons (lambda (v) v) '())))))
+  (lambda (name params body state) (cons params (cons body (cons (lambda (v) (cut-until-layer name v)) '())))))
+
+(define cut-until-layer
+  (lambda (x state)
+    (if (has-var-layer x (firstlayer state))
+        state
+        (cut-until-layer x (restlayers state)))))
+
+(define has-var-layer
+  (lambda (x layer)
+    (cond
+      ((layernull? layer) #f)
+      ((eq? (firstvar layer) x) #t)
+      (else (has-var-layer x (restpairs layer))))))
 
 ; Entry point into remove-cps
 (define remove-layer
