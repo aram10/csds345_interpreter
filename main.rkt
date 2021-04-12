@@ -28,7 +28,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
   (lambda (filename)
     (letrec
         ((globalstate (M-state-init (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
-      (M-state '(funcall main ()) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
+      (M-value-function '(funcall main) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
       
 
 #|
@@ -116,7 +116,17 @@ M-VALUE EXPRESSIONS
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
          (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
-         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next (removelayer s))) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+      )))
+
+(define M-state-funcall
+  (lambda (expression state return-func next break continue throw)
+    (letrec
+        ((closure (get-val (operand expression) state))
+         (fstate1 ((closure-state-function closure) state))
+         (formalparams (closure-params closure))
+         (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
+         (M-state (closure-body closure) fstate2 (lambda (val s) (next state)) (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
       )))
          
 
@@ -132,6 +142,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 |#
 (define M-state
   (lambda (expression state return-func next break continue throw)
+    (begin
+      (println state)
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
@@ -154,9 +166,9 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
-      ((funcall? expression) (next (M-value-function expression state return-func next break continue throw)))
+      ((funcall? expression) (M-state-funcall expression state return-func next break continue throw))
       (else error 'unsupported-statement)
-    )))
+    ))))
 
 (define M-state-init
   (lambda (expression state return-func next break continue throw)
@@ -181,6 +193,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw) state))
+      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value (assignexp expression) state return-func next break continue throw) state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code
@@ -198,13 +211,15 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
       ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state return-func next break continue throw) state))
-      (else (error 'bad-declaration)))))
+      (else (begin (println expression) (error 'bad-declaration))))))
 
 ; (( (x y fib) (#&5 #&true #&(params body lambda)) ))
 
 (define M-state-function
   (lambda (expression state)
-    (add (funcname expression) (create-closure (params expression) (funcbody expression) state) state)))
+    (add (funcname expression) (create-closure (funcname expression) (params expression) (funcbody expression) state) state)))
+
+
     
 
 ; Evaluates the result of an if statement and updates the state accordingly
@@ -260,13 +275,14 @@ FUNCTION STUFF
 
 (define create-bindings
   (lambda (formalparams actualparams state fstate1 return-func next break continue throw)
-    (if (not (null? formalparams))
-        (create-bindings (cdr formalparams)
-                         (cdr actualparams)
-                         state
-                         (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
-                         return-func next break continue throw)
-        fstate1)))
+    (cond
+      ((and (null? formalparams) (null? actualparams)) fstate1)
+      ((eq? (length formalparams) (length actualparams)) (create-bindings (cdr formalparams)
+                                                   (cdr actualparams)
+                                                   state
+                                                   (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
+                                                   return-func next break continue throw))
+      (else (error 'mismatch-params)))))
 
 
 #|
@@ -278,7 +294,7 @@ M-STATE HELPER FUNCTIONS
 (define add
   (lambda (x v state)
     (cond
-      ((member? x (vars (firstlayer state))) (error 'bad-declaration))
+      ((member? x (vars (firstlayer state))) (begin (println state) (error 'bad-declaration)))
       (else (cons (add-to-layer x v (firstlayer state)) (restlayers state))))))
 
 ; Creates a variable binding in a particular layer of the state
@@ -297,7 +313,20 @@ M-STATE HELPER FUNCTIONS
   (lambda (x state) (add x '() state)))
 
 (define create-closure
-  (lambda (params body state) (cons params (cons body (cons (lambda (v) v) '())))))
+  (lambda (name params body state) (cons params (cons body (cons (lambda (v) (cut-until-layer name v)) '())))))
+
+(define cut-until-layer
+  (lambda (x state)
+    (if (has-var-layer x (firstlayer state))
+        state
+        (cut-until-layer x (restlayers state)))))
+
+(define has-var-layer
+  (lambda (x layer)
+    (cond
+      ((layernull? layer) #f)
+      ((eq? (firstvar layer) x) #t)
+      (else (has-var-layer x (restpairs layer))))))
 
 ; Entry point into remove-cps
 (define remove-layer
