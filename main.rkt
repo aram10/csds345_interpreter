@@ -142,8 +142,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 |#
 (define M-state
   (lambda (expression state return-func next break continue throw)
-    (begin
-      (println state)
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
@@ -168,7 +166,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((function? expression) (next (M-state-function expression state)))
       ((funcall? expression) (M-state-funcall expression state return-func next break continue throw))
       (else error 'unsupported-statement)
-    ))))
+    )))
 
 (define M-state-init
   (lambda (expression state return-func next break continue throw)
