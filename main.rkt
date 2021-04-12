@@ -115,7 +115,17 @@ M-VALUE EXPRESSIONS
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
          (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
-         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next s)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+      )))
+
+(define M-state-funcall
+  (lambda (expression state return-func next break continue throw)
+    (letrec
+        ((closure (get-val (operand expression) state))
+         (fstate1 ((closure-state-function closure) state))
+         (formalparams (closure-params closure))
+         (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
+         (M-state (closure-body closure) fstate2 (lambda (val s) (next state)) (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
       )))
          
 
@@ -131,6 +141,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 |#
 (define M-state
   (lambda (expression state return-func next break continue throw)
+    (begin
+      (println state)
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
@@ -153,9 +165,9 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
-      ((funcall? expression) (M-value-function expression state (lambda (val s) (next s)) next break continue throw))
+      ((funcall? expression) (M-state-funcall expression state return-func next break continue throw))
       (else error 'unsupported-statement)
-    )))
+    ))))
 
 (define M-state-init
   (lambda (expression state return-func next break continue throw)
@@ -198,7 +210,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
       ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state return-func next break continue throw) state))
-      (else (error 'bad-declaration)))))
+      (else (begin (println expression) (error 'bad-declaration))))))
 
 ; (( (x y fib) (#&5 #&true #&(params body lambda)) ))
 
@@ -281,7 +293,7 @@ M-STATE HELPER FUNCTIONS
 (define add
   (lambda (x v state)
     (cond
-      ((member? x (vars (firstlayer state))) (error 'bad-declaration))
+      ((member? x (vars (firstlayer state))) (begin (println state) (error 'bad-declaration)))
       (else (cons (add-to-layer x v (firstlayer state)) (restlayers state))))))
 
 ; Creates a variable binding in a particular layer of the state
