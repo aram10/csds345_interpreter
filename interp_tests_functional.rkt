@@ -33,6 +33,8 @@
         (test-case "Test 54" (check-equal? (interpret-w-func "./tests_v3/17.txt") 125))
         (test-case "Test 55" (check-equal? (interpret-w-func "./tests_v3/18.txt") 100))
         (test-case "Test 56" (check-equal? (interpret-w-func "./tests_v3/19.txt") 2000400))
+        (test-case "Test 28" (check-exn exn:fail? (lambda () (interpret "./tests_v2/4.txt"))))
+
         
         
         
