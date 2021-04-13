@@ -4,7 +4,6 @@
         rackunit/text-ui
         rackunit/gui
         "./main.rkt"
-        "./simpleParser.rkt"
         "./functionParser.rkt"
         "./helpers.rkt")
 
