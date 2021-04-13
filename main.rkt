@@ -22,10 +22,6 @@ Receives a list of statements in prefix notation from the parser, and passes the
 
 (define interpret
   (lambda (filename)
-    (M-state (parser-simple filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
-
-(define interpret-w-func
-  (lambda (filename)
     (letrec
         ((globalstate (M-state-init (parser filename) (createnewstate) (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception)))))
       (M-value-function '(funcall main) globalstate (lambda (val s) val) (lambda (v) v) (lambda (v) v) (lambda (v) v) (lambda (e v) (error 'uncaught-exception))))))
@@ -59,18 +55,18 @@ M-VALUE EXPRESSIONS
     (cond
       ((boolean? expression) (M-boolean expression state return-func next break continue throw))
       ((funcall? expression) (M-value-function expression state return-func next break continue throw))
-      ((eq? (operator expression) '==) (booltoname (= (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                      (M-integer (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '!=) (booltoname (not (= (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                           (M-integer (rightoperand expression) state return-func next break continue throw)))))
-      ((eq? (operator expression) '>=) (booltoname (>= (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                       (M-integer (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '<=) (booltoname (<= (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                       (M-integer (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '>) (booltoname (> (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                     (M-integer (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '<) (booltoname (< (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                     (M-integer (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '==) (booltoname (= (M-value (leftoperand expression) state return-func next break continue throw)
+                                                      (M-value (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-value (leftoperand expression) state return-func next break continue throw)
+                                                           (M-value (rightoperand expression) state return-func next break continue throw)))))
+      ((eq? (operator expression) '>=) (booltoname (>= (M-value (leftoperand expression) state return-func next break continue throw)
+                                                       (M-value (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '<=) (booltoname (<= (M-value (leftoperand expression) state return-func next break continue throw)
+                                                       (M-value (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '>) (booltoname (> (M-value (leftoperand expression) state return-func next break continue throw)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw))))
+      ((eq? (operator expression) '<) (booltoname (< (M-value (leftoperand expression) state return-func next break continue throw)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw))))
       (else (error 'bad-comparison)))))
 
 ; Evaluates the result of an arithmetic expression   
@@ -81,18 +77,18 @@ M-VALUE EXPRESSIONS
       ((assigned? expression state) (get-val expression state))
       ((funcall? expression) (M-value-function expression state return-func next break continue throw))
       ((declared? expression state) (error 'value-not-found))
-      ((eq? (operator expression) '+) (+ (M-integer (leftoperand expression) state return-func next break continue throw)
-                                         (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '+) (+ (M-value (leftoperand expression) state return-func next break continue throw)
+                                         (M-value (rightoperand expression) state return-func next break continue throw)))
       ((and (eq? (operator expression) '-) (= 3 (length expression)))
-       (- (M-integer (leftoperand expression) state return-func next break continue throw) (M-integer (rightoperand expression) state return-func next break continue throw)))
+       (- (M-value (leftoperand expression) state return-func next break continue throw) (M-value (rightoperand expression) state return-func next break continue throw)))
       ((and (eq? (operator expression) '-) (= 2 (length expression)))
        (* -1 (M-integer (operand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '*) (* (M-integer (leftoperand expression) state return-func next break continue throw)
-                                         (M-integer (rightoperand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '/) (quotient (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                (M-integer (rightoperand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '%) (remainder (M-integer (leftoperand expression) state return-func next break continue throw)
-                                                 (M-integer (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '*) (* (M-value (leftoperand expression) state return-func next break continue throw)
+                                         (M-value (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '/) (quotient (M-value (leftoperand expression) state return-func next break continue throw)
+                                                (M-value (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '%) (remainder (M-value (leftoperand expression) state return-func next break continue throw)
+                                                 (M-value (rightoperand expression) state return-func next break continue throw)))
       (else (error 'bad-operator)))))
 
 ; General expression evaluater: entry point into M-compare, M-integer, M-boolean    
@@ -116,7 +112,8 @@ M-VALUE EXPRESSIONS
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
          (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
-         (M-state (closure-body closure) fstate2 return-func (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+         (M-state (closure-body closure) fstate2 (lambda (val s) val)  (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop))
+                  (lambda (e s) (throw e state)))
       )))
 
 (define M-state-funcall
@@ -126,7 +123,8 @@ M-VALUE EXPRESSIONS
          (fstate1 ((closure-state-function closure) state))
          (formalparams (closure-params closure))
          (fstate2 (create-bindings formalparams (actualparams expression) state (addlayer fstate1) return-func next break continue throw)))
-         (M-state (closure-body closure) fstate2 (lambda (val s) (next state)) (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop)) throw)
+         (M-state (closure-body closure) fstate2 (lambda (val s) (next state)) (lambda (s) (next state)) (lambda (v) (error 'not-a-loop)) (lambda (v) (error 'not-a-loop))
+                  (lambda (e s) (throw e state)))
       )))
          
 
@@ -145,8 +143,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
     (cond
       ((null? expression) (next state))
       ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
-      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
-      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
+      ((declare? expression) (call/cc (lambda (throw-cc) (next (M-state-declare expression state return-func next break continue (lambda (e s) (throw-cc (throw e s))))))))
+      ((assign? expression) (call/cc (lambda (throw-cc) (next (M-state-assign expression state return-func next break continue (lambda (e s) (throw-cc (throw e s))))))))
       ((while? expression) (call/cc (lambda (k)
                                       (M-state-while expression state return-func next k continue throw))))
       ((if? expression) (M-state-if expression state return-func next break continue throw))
@@ -160,7 +158,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
                                                                                                    (next (removelayer s))) (lambda (s)
                                                                                                                              (break (removelayer s))) (lambda (s)
                                                                                                                                                         (continue (removelayer s))) throw))
-      ((throw? expression) (throw (throwvalue expression) state))
+      ((throw? expression) (throw (M-value (throwvalue expression) state return-func next break continue throw) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
@@ -191,7 +189,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw) state))
-      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value (assignexp expression) state return-func next break continue throw) state))
+      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value-function (assignexp expression) state return-func next break continue throw) state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code

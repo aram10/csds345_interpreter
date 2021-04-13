@@ -1,3 +1,4 @@
+function main() {
 var i = 0;
 var j = 0;
 var k = 0;
@@ -16,3 +17,4 @@ while(i < 10)
 	i = i + 1;
 }
 return i + j + k + iter;
+}

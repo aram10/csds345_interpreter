@@ -1,3 +1,4 @@
+function main() {
 var i = 2;
 		var j = 3;
 		var k = 5;
@@ -35,3 +36,4 @@ var i = 2;
 		}
 		
 		return i * j * k;
+}

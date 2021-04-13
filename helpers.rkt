@@ -300,7 +300,11 @@ STATE INTERFACING HELPER FUNCTIONS
     (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
 
 ; Removes the frontmost layer from the state
-(define removelayer (lambda (state) (restlayers state)))
+(define removelayer
+  (lambda (state)
+    (if (declared-layer? 'main (firstlayer state))
+        state
+        (restlayers state))))
 
 ; Retrieves the tail of the state
 (define restlayers (lambda (state) (cdr state)))
