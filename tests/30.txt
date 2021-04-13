@@ -1,2 +1,4 @@
+function main() {
 if(true)
     return 5;
+}

@@ -1,4 +1,4 @@
-ar x = 4;
+var x = 4;
 var y = 6 + x;
 
 function main() {

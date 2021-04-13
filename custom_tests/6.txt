@@ -1,3 +1,4 @@
+function main() {
 var x = 12;
 		var i = 6;
 		var j = i / 2;
@@ -46,3 +47,4 @@ var x = 12;
 			}
 		}
 		return j * x;
+}

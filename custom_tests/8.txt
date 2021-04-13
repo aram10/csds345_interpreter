@@ -1,3 +1,4 @@
+function main() {
 var x = 19;
 		var y = 2;
 		var z = 99;
@@ -62,3 +63,4 @@ var x = 19;
 		}
 
 		return x + z % y;
+}

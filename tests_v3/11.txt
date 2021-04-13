@@ -1,4 +1,4 @@
-unction f(a) {
+function f(a) {
   return a*a;
 }
 

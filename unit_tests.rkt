@@ -5,6 +5,7 @@
         rackunit/gui
         "./helpers.rkt"
         "./simpleParser.rkt"
+        "./functionParser.rkt"
         "./main.rkt")
 
 (define class-tests
@@ -30,10 +31,10 @@
         (check-equal? (declared? 'x '(((y z)(#&8 #&())) ((q r x)(#&() #&7 #&())))) #t "Test 16")
         (check-equal? (declared? 'x '(((y z)(#&8 #&())) ((q r x)(#&() #&7 #&false)))) #t "Test 17")
 
-        (check-exn exn:fail? (lambda () (get-val 'x (createnewstate))) "Test 18")
+        (check-exn exn:fail? (λ () (get-val 'x (createnewstate))) "Test 18")
         (check-equal? (get-val 'x '(((x)(#&5)))) 5 "Test 19")
         (check-equal? (get-val 'x '(((x)(#&())))) '() "Test 20")
-        (check-exn exn:fail? (lambda () (get-val 'x '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8))))) "Test 21")
+        (check-exn exn:fail? (λ () (get-val 'x '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8))))) "Test 21")
         (check-equal? (get-val 'k '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8)))) '() "Test 22")
         (check-equal? (get-val 'x '(((y x z)(#&() #&true #&9)))) 'true "Test 23")
         (check-equal? (get-val 'x '(((y z)(#&8 #&())) ((q r x)(#&() #&7 #&())))) '() "Test 24")
@@ -44,13 +45,24 @@
               (check-equal? (add 'x 4 (createnewstate)) '(((x)(#&4))) "Test add empty")
               (check-equal? (add 'y 4 '(((x)(#&5)))) '(((y x)(#&4 #&5))) "Test add existing")
               (check-equal? (add 'y 4 '((()()) ((x)(#&5)))) '(((y)(#&4)) ((x)(#&5))) "Test add empty first layer")
-              (check-exn exn:fail? (lambda () (add 'y 4 '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8))))) "Test 21")
+              (check-exn exn:fail? (λ () (add 'y 4 '(((w y z) (#&7 #&true #&())) ((k l)(#&() #&8))))) "Test 21")
 
               (check-equal? (get-box 'x '(((x)(#&5)))) (box 5))
               
   ))
+
+
+(define function-tests
+  (test-suite "M-Value Tests"
+              (test-case "Single closure test"
+                         (check-equal? (create-bindings '(a) '(-1) (createnewstate) (addlayer (createnewstate))
+                                                                              (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))
+                                       '(((a)(#&-1)) (()()))))
+              
+              ))
               
 
 (run-tests class-tests 'verbose)
 ;(test/gui class-tests)
 (run-tests main-tests 'verbose)
+(run-tests function-tests 'verbose)

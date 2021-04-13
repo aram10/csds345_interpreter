@@ -1,4 +1,4 @@
-unction minmax(a, b, min) {
+function minmax(a, b, min) {
   if (min && a < b || !min && a > b)
     return true;
   else

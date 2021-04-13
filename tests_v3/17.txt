@@ -1,4 +1,5 @@
 function divide(x, y) {
+  var r = 4;
   if (y == 0)
     throw y;
   return x / y;
