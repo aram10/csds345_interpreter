@@ -2,6 +2,24 @@
 
 (provide (all-defined-out))
 
+; λ: 'Ctrl + \'
+
+;(class A () ((var x 1) (var y 2) (function m () ((return (funcall (dot this m2))))) (function m2 () ((return (+ x y)))))
+;(class B (extends A) ((var y 22) (var z 3) (function m () ((return (funcall (dot super m))))) (function m2 () ((return (+ (+ x y) z))))))
+
+ 
+
+(define super-class
+  (λ (expression)
+    (if (null? (caddr expression))
+        '()
+        (operand (caddr expression)))))
+
+(define class-body
+  (λ (expression) (cadddr expression)))
+
+
+
 #|
 FUNCTION ANATOMY HELPERS
 |#
