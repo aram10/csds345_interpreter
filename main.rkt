@@ -23,7 +23,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 (define interpret
   (λ (filename)
     (letrec
-        ((globalstate (M-state-init (parser filename) (createnewstate) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
+        ((globalstate (M-state-init (parser filename) (createnewstate) (λ (v) v) )))
       (M-value-function '(funcall main) globalstate (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
       
 
@@ -141,15 +141,16 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; The "vanguard" of the interpreter: initial pass-through to bind global variables and functions
 (define M-state-init
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state next)
     (cond
       ((null? expression) (next state))
-      ((statement? expression) (M-state-init (car expression) state return-func (λ (s)
-                                                                             (M-state-init (cdr expression) s return-func next break continue throw)) break continue throw))
-      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
-      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
+      ((statement? expression) (M-state-init (car expression) state (λ (s) (M-state-init (cdr expression) s next))))
+      ((declare? expression) (next (M-state-declare expression state (λ (val s) val) next (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
+      ((assign? expression) (next (M-state-assign expression state (λ (val s) val) next (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
       ((function? expression) (next (M-state-function expression state)))
-      (else (M-state-init (cdr expression) state return-func next break continue throw)))))
+      (else (M-state-init (cdr expression) state next)))))
+
+ 
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
