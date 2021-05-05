@@ -150,8 +150,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((function? expression) (next (M-state-function expression state)))
       (else (M-state-init (cdr expression) state next)))))
 
-;(λ (val s) val) next (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)
-    
+ 
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
@@ -310,6 +309,40 @@ M-STATE HELPER FUNCTIONS
 ; Function closure 3-tuple (params, body, λ(state) -> state)
 (define create-closure
   (λ (name params body state) (list params body (λ (v) (cut-until-layer name v)))))
+
+#|
+class A{
+var h = 10;
+
+function x(a, b)
+{
+   return a + b;
+}
+
+function y(c, d)
+{
+   return c - d;
+}
+}
+
+( (main A) ((return 10) )
+
+( (() ((h x y) (10 (a b (return a + b) λ(s)) (c d (return c - d) λ(s))))) )
+
+a = new A();
+b = new A();
+
+|#
+
+
+(define create-instance-closure
+  (λ (rt-type values) (list rt-type values)))
+
+(define create-class-closure
+  (λ (super-class bindings) (list super-class bindings)))
+
+(define get-class-bindings
+  (λ (body) (M-state-init body (createnewstate) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
 
 ; Returns the portion of the state that contains x
 (define cut-until-layer
