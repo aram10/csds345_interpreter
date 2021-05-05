@@ -45,6 +45,11 @@ FUNCTION ANATOMY HELPERS
   (λ (expression)
     (eq? 'function (operator expression))))
 
+; Checks whether a statement is a function
+(define static-function?
+  (λ (expression)
+    (eq? 'static-function (operator expression))))
+
 
 #|
 STATEMENT ANATOMY HELPERS
@@ -77,6 +82,12 @@ STATEMENT ANATOMY HELPERS
 
 ; Gets the name of a function
 (define funcname (λ (expression) (cadr expression)))
+
+; Gets the name of a class
+(define classname (λ (expression) (cadr expression)))
+
+; Get the keyword of an expression
+(define keyword (λ (expression) (car expression)))
 
 ; Gets the left operand of a binary expression 
 (define leftoperand cadr)
@@ -156,6 +167,9 @@ EXPRESSION TYPE HELPERS
 ; Determines whether an expression is a goto for breaking out of a while loop
 (define break?
   (λ (expr) (eq? (operator expr) 'break)))
+
+(define class?
+  (λ (expr) (eq? (keyword expr) 'class)))
 
 ; Determines whether an expression is a goto for continuing the while loop
 (define continue?

@@ -1,7 +1,7 @@
 #lang racket
 
 (provide (all-defined-out))
-(require "functionParser.rkt" "helpers.rkt")
+(require "classParser.rkt" "helpers.rkt")
 
 #|
 CSDS 345 Simple Language Interpreter Project
@@ -21,7 +21,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
 |#
 
 (define interpret
-  (λ (filename)
+  (λ (filename classname)
     (letrec
         ((globalstate (M-state-init (parser filename) (createnewstate) (λ (v) v) )))
       (M-value-function '(funcall main) globalstate (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
@@ -145,11 +145,13 @@ necessary updates to the state, and evaluates to the special variable 'return, o
     (cond
       ((null? expression) (next state))
       ((statement? expression) (M-state-init (car expression) state (λ (s) (M-state-init (cdr expression) s next))))
-      ((declare? expression) (next (M-state-declare expression state (λ (val s) val) next (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
-      ((assign? expression) (next (M-state-assign expression state (λ (val s) val) next (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
-      ((function? expression) (next (M-state-function expression state)))
-      (else (M-state-init (cdr expression) state next)))))
+      ((class? expression) (next (M-state-class expression state)))
+      (else (error 'bad-class-declaration)))))
 
+(define M-state-class
+  (λ (expression state)
+    ; generate state w class closure
+    (add (classname expression) (create-class-closure (super-class expression) (class-body expression)) state)))
  
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
@@ -262,6 +264,20 @@ FUNCTION STUFF
              (λ (v) (error 'not-a-loop))
              (λ (e s) (throw e state)))))
 
+#|
+M-state-funcall:
+	M-state (closure-body (operator exp) state) (create-bindings ....)
+
+closure-body -> parse tree for function body
+create-bindings -> return state with function params added in an extra layer
+
+if operator is (dot obj funcname) --> 
+	obj-function-closure <- find function closure from instance closure
+	(closure-body) -> get the function body from instance closure
+	(create-binding closure) -> gets the function params from the instance closure, adds obj as this to list of actual-params, add layer to state 
+if operator is (name) --> 
+|#
+
 ; Function evaluator, when it is used in an assignment statement
 (define M-value-function
   (λ (expression state return-func next break continue throw)
@@ -339,10 +355,10 @@ b = new A();
   (λ (rt-type values) (list rt-type values)))
 
 (define create-class-closure
-  (λ (super-class bindings) (list super-class bindings)))
+  (λ (super-class body) (list super-class (get-class-bindings body))))
 
 (define get-class-bindings
-  (λ (body) (M-state-init body (createnewstate) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))
+  (λ (body) (M-state-init body (createnewstate) (λ (v) v))))
 
 ; Returns the portion of the state that contains x
 (define cut-until-layer
