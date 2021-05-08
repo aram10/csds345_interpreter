@@ -2,6 +2,7 @@
 
 (provide (all-defined-out))
 (require racket/match)
+(require errortrace)
 (require "classParser.rkt" "helpers.rkt")
 
 #|
@@ -30,8 +31,13 @@ Receives a list of statements in prefix notation from the parser, and passes the
 (define interpret
   (λ (filename classname)
     (letrec
-        ((globalstate (M-state-init (parser filename) (createnewstate) (λ (v) v) )))
-      (M-state '(dot classname main) globalstate (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
+        [(globalstate (M-state-init (parser filename) (createnewstate) (λ (v) v) ))
+         (mainclassclosure (get-val classname globalstate))
+         (funcnames (class-closure-func-names mainclassclosure))
+         (funcclosures (class-closure-func-closures mainclassclosure))
+         (mainfuncclosure (get-val-layer 'main (list funcnames funcclosures)))
+         (globalstatemain (add 'main mainfuncclosure (addlayer globalstate)))]
+      (M-value-function '(funcall main) globalstatemain (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
 
 #|
 M-VALUE EXPRESSIONS
@@ -107,7 +113,7 @@ M-VALUE EXPRESSIONS
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw))
       ((comparison? expression) (M-compare expression state return-func next break continue throw))
       ((funcall? expression) (M-value-function expression state return-func next break continue throw))
-      ((new? expression) (create-instance-closure)) ;TODO
+      ((new? expression) (create-instance-closure (newruntimetype expression) state))
       (else (error 'bad-argument)))))
 
 #|
@@ -345,31 +351,50 @@ if operator is (name) -->
 
 ; Get the variables defined in a class body
 ; TESTING
-(define parse-class-var
-  (λ (body state)
+(define parse-class-var-exprs
+  (λ (body)
     (if (null? body)
-        state
+        body
         (match (car body)
-          ((list 'var name) (parse-class-var (cdr body) (add name (list 'var name) state)))
-          ((list 'var name expr) (parse-class-var (cdr body) (add name (list 'var name expr) state)))
-          (_ (parse-class-var (cdr body) state))))))
+          ((list 'var name) (cons (car body) (parse-class-var-exprs (cdr body))))
+          ((list 'var name expr) (cons (car body) (parse-class-var-exprs (cdr body))))
+          (_ (parse-class-var-exprs (cdr body)))))))
+
+(define parse-class-var-names
+  (λ (body)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'var name) (cons name (parse-class-var-names (cdr body))))
+          ((list 'var name expr) (cons name (parse-class-var-names (cdr body))))
+          (_ (parse-class-var-names (cdr body)))))))
 
 
 ; Get the functions defined in a class body
 ; TESTING
-(define parse-class-func
-  (λ (body state)
+(define parse-class-func-names
+  (λ (body)
     (if (null? body)
-        state
+        body
         (match (car body)
-          ((list 'function name param funcbody) (parse-class-func (cdr body) (M-state-function (list 'function name param funcbody) state)))
-          ((list 'static-function name param funcbody) (parse-class-func (cdr body) (M-state-function (list 'static-function name param funcbody) state)))
-          (_ (parse-class-func (cdr body) state))))))
+          ((list 'function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          ((list 'static-function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          (_ (parse-class-func-names (cdr body)))))))
+
+(define parse-class-func-closures
+  (λ (body)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
+          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
+          (_ (parse-class-func-closures (cdr body)))))))
+
 
 ; helper function: parse class property by inserting a function that takes a class body and a state
 ; returns a LAYER i.e ((var_names .... ) (parser_result....)) 
 (define parse-class-property
-  (λ (body parser-func) (firstlayer (parser-func body (createnewstate)))))
+  (λ (body parser-func) (parser-func body (createnewstate))))
              
 
 #|
@@ -403,22 +428,19 @@ M-STATE HELPER FUNCTIONS
 (define create-closure
   (λ (name params body state) (list params body (λ (v) (cut-until-layer name v)))))
 
-; TESTING
+; contain the instance's class (i.e. the run-time type or the true type) 
+; and a list of instance field VALUES.
 (define create-instance-closure
-  (λ (rt-type state) (list rt-type (instance-val (cadr (get-val rt-type state)) (createnewlayer) state))))
-
-; Run M-value on instances inside the class closure to generate the fields for instance closure
-; returns a layer i.e ((var_names .... ) (m_value_result....))
-; DOES NOT WORK
-(define instance-val
-  (λ (class-val layer state)
-    (if (null? (vars class-val))
-        layer
-        (instance-val (restpairs class-val) (add-to-layer (firstvar class-val)
-                                                          (M-state (firstval class-val) state (λ (val s) val) (λ (v) v)
-                                                                   (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))
-                                                          layer) (M-state (firstval class-val) state (λ (val s) val) (λ (v) v)
-                                                                   (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))))
+  ; (list rt-type (firstlayer (M-state (caddr (get-val rt-type state)) (addlayer state) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))))
+  (λ (rt-type state) 
+    (letrec
+      [(classclosure (get-val rt-type state))
+      (funcnames (class-closure-func-names classclosure))
+      (funcclosures (class-closure-func-closures classclosure))
+      (varexprs (class-closure-var-exprs classclosure))
+      (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
+      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))]
+      (list rt-type (vals (firstlayer definedvarstate))))))
     
     
 ; (expression state next)
@@ -436,9 +458,17 @@ M-state-instance (expression correpondng to fields and methods in class-closure)
 |#
                                                                   
   
-; TESTING
+; define class closures
+; the parent/super class, 
+; the list of instance field names and the expressions that compute their initial values (if any), 
+; the list of methods/function names and closures, 
+; and (optionally) a list of class field names/values and a list of constructors
 (define create-class-closure
-  (λ (super-class body) (list super-class (parse-class-property (reverse body) parse-class-var)  (parse-class-property (reverse body) parse-class-func))))
+  (λ (super-class body) (list super-class 
+                              (parse-class-var-names body)
+                              (parse-class-var-exprs body)
+                              (parse-class-func-names body)
+                              (parse-class-func-closures body))))
 
 (define get-class-bindings
   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))

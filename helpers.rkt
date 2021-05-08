@@ -26,6 +26,12 @@
 (define class-closure-body
   (λ (expression) (cadr expression)))
 
+(define class-closure-var-names cadr)
+(define class-closure-var-exprs caddr)
+(define class-closure-func-names cadddr)
+(define class-closure-func-closures 
+  (lambda (closure) (list-ref closure 4)))
+
 
 
 #|
@@ -143,6 +149,7 @@ STATEMENT ANATOMY HELPERS
 ; Gets the expression thrown in a 'throw' statement
 (define throwvalue (λ (expression) (operand expression)))
 
+(define newruntimetype cadr)
 
 #|
 EXPRESSION TYPE HELPERS
