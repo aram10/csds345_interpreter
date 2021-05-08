@@ -37,7 +37,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
          (funcclosures (class-closure-func-closures mainclassclosure))
          (mainfuncclosure (get-val-layer 'main (list funcnames funcclosures)))
          (globalstatemain (add 'main mainfuncclosure (addlayer globalstate)))]
-      (M-value-function '(funcall main) globalstatemain (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
+      (M-value-function '(funcall main) globalstatemain (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) classname '()))))
 
 #|
 M-VALUE EXPRESSIONS
@@ -45,74 +45,74 @@ M-VALUE EXPRESSIONS
 
 ; Evaluates the result of a boolean algebra expression
 (define M-boolean
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((isbool? expression) expression)
-      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((declared? expression state) (get-val expression state))
-      ((comparison? expression) (M-compare expression state return-func next break continue throw))
-      ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
-                                                     (M-value (rightoperand expression) state return-func next break continue throw)
+      ((comparison? expression) (M-compare expression state return-func next break continue throw compiletype this_obj))
+      ((eq? (operator expression) '&&) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)
                                                      (λ(x y) (and x y))))
-      ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw)
-                                                     (M-value (rightoperand expression) state return-func next break continue throw)
+      ((eq? (operator expression) '||) (boolstringop (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)
                                                      (λ(x y) (or x y))))
-      ((eq? (operator expression) '!) (boolstringsingle (M-value (leftoperand expression) state return-func next break continue throw)
+      ((eq? (operator expression) '!) (boolstringsingle (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
                                                         (λ (x) (not x))))
       (else (error 'bad-operator)))))
 
 ; Evaluates the result of a comparison between 2 arithmetic expressions
 (define M-compare
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
-      ((boolean? expression) (M-boolean expression state return-func next break continue throw))
-      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
-      ((eq? (operator expression) '==) (booltoname (= (M-value (leftoperand expression) state return-func next break continue throw)
-                                                      (M-value (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '!=) (booltoname (not (= (M-value (leftoperand expression) state return-func next break continue throw)
-                                                           (M-value (rightoperand expression) state return-func next break continue throw)))))
-      ((eq? (operator expression) '>=) (booltoname (>= (M-value (leftoperand expression) state return-func next break continue throw)
-                                                       (M-value (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '<=) (booltoname (<= (M-value (leftoperand expression) state return-func next break continue throw)
-                                                       (M-value (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '>) (booltoname (> (M-value (leftoperand expression) state return-func next break continue throw)
-                                                     (M-value (rightoperand expression) state return-func next break continue throw))))
-      ((eq? (operator expression) '<) (booltoname (< (M-value (leftoperand expression) state return-func next break continue throw)
-                                                     (M-value (rightoperand expression) state return-func next break continue throw))))
+      ((boolean? expression) (M-boolean expression state return-func next break continue throw compiletype this_obj))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
+      ((eq? (operator expression) '==) (booltoname (= (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                      (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj))))
+      ((eq? (operator expression) '!=) (booltoname (not (= (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                           (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))))
+      ((eq? (operator expression) '>=) (booltoname (>= (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                       (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj))))
+      ((eq? (operator expression) '<=) (booltoname (<= (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                       (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj))))
+      ((eq? (operator expression) '>) (booltoname (> (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj))))
+      ((eq? (operator expression) '<) (booltoname (< (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                     (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj))))
       (else (error 'bad-comparison)))))
 
 ; Evaluates the result of an arithmetic expression   
 (define M-integer
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((number? expression) expression)
       ((assigned? expression state) (get-val expression state))
-      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((declared? expression state) (error 'value-not-found))
-      ((eq? (operator expression) '+) (+ (M-value (leftoperand expression) state return-func next break continue throw)
-                                         (M-value (rightoperand expression) state return-func next break continue throw)))
+      ((eq? (operator expression) '+) (+ (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                         (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))
       ((and (eq? (operator expression) '-) (= 3 (length expression)))
-       (- (M-value (leftoperand expression) state return-func next break continue throw) (M-value (rightoperand expression) state return-func next break continue throw)))
+       (- (M-value (leftoperand expression) state return-func next break continue throw) (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))
       ((and (eq? (operator expression) '-) (= 2 (length expression)))
-       (* -1 (M-integer (operand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '*) (* (M-value (leftoperand expression) state return-func next break continue throw)
-                                         (M-value (rightoperand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '/) (quotient (M-value (leftoperand expression) state return-func next break continue throw)
-                                                (M-value (rightoperand expression) state return-func next break continue throw)))
-      ((eq? (operator expression) '%) (remainder (M-value (leftoperand expression) state return-func next break continue throw)
-                                                 (M-value (rightoperand expression) state return-func next break continue throw)))
+       (* -1 (M-integer (operand expression) state return-func next break continue throw compiletype this_obj)))
+      ((eq? (operator expression) '*) (* (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                         (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))
+      ((eq? (operator expression) '/) (quotient (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))
+      ((eq? (operator expression) '%) (remainder (M-value (leftoperand expression) state return-func next break continue throw compiletype this_obj)
+                                                 (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj)))
       (else (error 'bad-operator)))))
 
 ; General expression evaluater: entry point into M-compare, M-integer, M-boolean    
 (define M-value
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((declared? expression state) (get-val expression state))
       ((isbool? expression) expression)
-      ((arithmetic? expression) (M-integer expression state return-func next break continue throw))
-      ((boolalg? expression) (M-boolean expression state return-func next break continue throw))
-      ((comparison? expression) (M-compare expression state return-func next break continue throw))
-      ((funcall? expression) (M-value-function expression state return-func next break continue throw))
+      ((arithmetic? expression) (M-integer expression state return-func next break continue throw compiletype this_obj))
+      ((boolalg? expression) (M-boolean expression state return-func next break continue throw compiletype this_obj))
+      ((comparison? expression) (M-compare expression state return-func next break continue throw compiletype this_obj))
+      ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((new? expression) (create-instance-closure (newruntimetype expression) state))
       (else (error 'bad-argument)))))
 
@@ -125,30 +125,30 @@ Entry point into all other M-state expressions: accepts an expression which may 
 necessary updates to the state, and evaluates to the special variable 'return, once it is declared/assigned
 |#
 (define M-state
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((null? expression) (next state))
-      ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw) state))
-      ((declare? expression) (call/cc (λ (throw-cc) (next (M-state-declare expression state return-func next break continue (λ (e s) (throw-cc (throw e s))))))))
-      ((assign? expression) (call/cc (λ (throw-cc) (next (M-state-assign expression state return-func next break continue (λ (e s) (throw-cc (throw e s))))))))
+      ((return? expression) (return-func (M-value (operand expression) state return-func next break continue throw compiletype this_obj) state))
+      ((declare? expression) (call/cc (λ (throw-cc) (next (M-state-declare expression state return-func next break continue (λ (e s) (throw-cc (throw e s))) compiletype this_obj)))))
+      ((assign? expression) (call/cc (λ (throw-cc) (next (M-state-assign expression state return-func next break continue (λ (e s) (throw-cc (throw e s))) compiletype this_obj)))))
       ((while? expression) (call/cc (λ (k)
-                                      (M-state-while expression state return-func next k continue throw))))
-      ((if? expression) (M-state-if expression state return-func next break continue throw))
+                                      (M-state-while expression state return-func next k continue throw compiletype this_obj))))
+      ((if? expression) (M-state-if expression state return-func next break continue throw compiletype this_obj))
       ((statement? expression) (M-state (car expression) state return-func (λ (s)
-                                                                             (M-state (cdr expression) s return-func next break continue throw)) break continue throw))
+                                                                             (M-state (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
       ((block? expression) (M-state-block (statements expression) (addlayer state) return-func (λ (s)
                                                                                                  (next (removelayer s))) (λ (s)
                                                                                                                            (break (removelayer s))) (λ (s)
-                                                                                                                                                      (continue (removelayer s))) throw))
+                                                                                                                                                      (continue (removelayer s))) throw compiletype this_obj))
       ((trycatch? expression) (M-state-try-catch-finally expression (addlayer state) return-func (λ (s)
                                                                                                    (next (removelayer s))) (λ (s)
                                                                                                                              (break (removelayer s))) (λ (s)
-                                                                                                                                                        (continue (removelayer s))) throw))
-      ((throw? expression) (throw (M-value (throwvalue expression) state return-func next break continue throw) state))
+                                                                                                                                                        (continue (removelayer s))) throw compiletype this_obj))
+      ((throw? expression) (throw (M-value (throwvalue expression) state return-func next break continue throw compiletype this_obj) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
-      ((funcall? expression) (M-state-funcall expression state return-func next break continue throw))
+      ((funcall? expression) (M-state-funcall expression state return-func next break continue throw compiletype this_obj))
       ((dot? expression) -1) 
       (else error 'unsupported-statement)
     )))
@@ -199,88 +199,88 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 |#
 
 (define M-state-instance
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((null? expression) (next state))
       ((statement? expression) (M-state-instance (car expression) state return-func (λ (s)
-                                                                             (M-state-instance (cdr expression) s return-func next break continue throw)) break continue throw))
-      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
-      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
-      ((function? expression) (next (M-state-function expression state)))
-      ((static-function? expression) (next (M-state-function expression state)))
+                                                                             (M-state-instance (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
+      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw compiletype this_obj)))
+      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw compiletype this_obj)))
+      ((function? expression) (next (M-state-function expression state compiletype this_obj)))
+      ((static-function? expression) (next (M-state-function expression state compiletype this_obj)))
       (else (error 'm-state-instance)))))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
       ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
-      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw) state))
-      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw) state))
-      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value-function (assignexp expression) state return-func next break continue throw) state))
+      ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
+      ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
+      ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value-function (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code
 (define M-state-block
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((null? expression) (next state))
       (else (M-state (firststatement expression) state return-func (λ (s)
-                                                                     (M-state-block (reststatement expression) s return-func next break continue throw)) break continue throw)))))
+                                                                     (M-state-block (reststatement expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj)))))
 
 ; Adds a variable with the given name and the value '() to the state
 (define M-state-declare
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((not (declare? expression)) (error 'not-a-declaration))
       ((eq? (length expression) 2) (declare (operand expression) state))
-      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state return-func next break continue throw) state))
+      ((eq? (length expression) 3) (add (leftoperand expression) (M-value (rightoperand expression) state return-func next break continue throw compiletype this_obj) state))
       (else (error 'bad-declaration)))))
 
 
 ; Evaluates the result of an if statement and updates the state accordingly
 (define M-state-if
-  (λ (expression state return-func next break continue throw)
-    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw))
-      (M-state (body expression) state return-func next break continue throw)
-      (M-state (else-case expression) state return-func next break continue throw))))
+  (λ (expression state return-func next break continue throw compiletype this_obj)
+    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw compiletype this_obj))
+      (M-state (body expression) state return-func next break continue throw compiletype this_obj)
+      (M-state (else-case expression) state return-func next break continue throw compiletype this_obj))))
 
 ; Evaluates the result of a try-catch/try-catch-finally block
 (define M-state-try-catch-finally
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (M-state (tryblock expression) state
              ;return-func
-             (λ (v s) (M-state (finallyblock expression) s return-func (λ (s1) (return-func v s1)) break continue throw))
+             (λ (v s) (M-state (finallyblock expression) s return-func (λ (s1) (return-func v s1)) break continue throw compiletype this_obj))
              ;next
-             (λ (s) (M-state (finallyblock expression) s return-func next break continue throw))
+             (λ (s) (M-state (finallyblock expression) s return-func next break continue throw compiletype this_obj))
              ;break
-             (λ (s) (M-state (finallyblock expression) s return-func break break continue throw))
+             (λ (s) (M-state (finallyblock expression) s return-func break break continue throw compiletype this_obj))
              ;continue
-             (λ (s) (M-state (finallyblock expression) s return-func continue break continue throw))
+             (λ (s) (M-state (finallyblock expression) s return-func continue break continue throw compiletype this_obj))
              ;throw
              (λ (e s) (M-state (catchblock expression) (add (catchvar expression) e s)
                                      ;return-func
-                                     (λ (v1 s1) (M-state (finallyblock expression) s1 return-func (λ (s2) (return-func v1 s2)) break continue throw))
+                                     (λ (v1 s1) (M-state (finallyblock expression) s1 return-func (λ (s2) (return-func v1 s2)) break continue throw compiletype this_obj))
                                      ;next
-                                     (λ (s1) (M-state (finallyblock expression) s1 return-func next break continue throw))
+                                     (λ (s1) (M-state (finallyblock expression) s1 return-func next break continue throw compiletype this_obj))
                                      ;break
-                                     (λ (s1) (M-state (finallyblock expression) s1 return-func break break continue throw))
+                                     (λ (s1) (M-state (finallyblock expression) s1 return-func break break continue throw compiletype this_obj))
                                      ;continue
-                                     (λ (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw))
+                                     (λ (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw compiletype this_obj))
                                      ;newThrow
-                                     (λ (e1 s1) (M-state (finallyblock expression) s1 return-func (λ (s2) (throw e1 s2)) break continue throw)))))))
+                                     (λ (e1 s1) (M-state (finallyblock expression) s1 return-func (λ (s2) (throw e1 s2)) break continue throw compiletype this_obj)))))))
 
 ; Evaluates the result of a while statement
 (define M-state-while
-  (λ (expression state return-func next break continue throw)
-    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw))
+  (λ (expression state return-func next break continue throw compiletype this_obj)
+    (if (nametobool (M-boolean (condition expression) state return-func next break continue throw compiletype this_obj))
       (M-state (body expression) state return-func 
-            (λ (s1) (M-state-while expression s1 return-func next break continue throw))
+            (λ (s1) (M-state-while expression s1 return-func next break continue throw compiletype this_obj))
             (λ (s) (next s))
-            (λ (s2) (M-state-while expression s2 return-func next break continue throw)) throw)
+            (λ (s2) (M-state-while expression s2 return-func next break continue throw compiletype this_obj)) throw compiletype this_obj)
       (next state))))
 
 #|
@@ -289,14 +289,14 @@ FUNCTION STUFF
 
 ; Bind the formal parameters to the actual parameters
 (define create-bindings
-  (λ (formalparams actualparams state fstate1 return-func next break continue throw)
+  (λ (formalparams actualparams state fstate1 return-func next break continue throw compiletype this_obj)
     (cond
       ((and (null? formalparams) (null? actualparams)) fstate1)
       ((eq? (length formalparams) (length actualparams)) (create-bindings (cdr formalparams)
                                                    (cdr actualparams)
                                                    state
-                                                   (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw) fstate1)
-                                                   return-func next break continue throw))
+                                                   (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw compiletype this_obj) fstate1)
+                                                   return-func next break continue throw compiletype this_obj))
       (else (error 'mismatch-params)))))
 
 (define M-state-function
@@ -305,7 +305,7 @@ FUNCTION STUFF
 
 ; Function evaluator, when the function stands alone
 (define M-state-funcall
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
     (M-state (closure-body (get-val (operand expression) state))
              (create-bindings
                    (closure-params (get-val (operand expression) state))
@@ -317,7 +317,8 @@ FUNCTION STUFF
              (λ (s) (next state))
              (λ (v) (error 'not-a-loop))
              (λ (v) (error 'not-a-loop))
-             (λ (e s) (throw e state)))))
+             (λ (e s) (throw e state))
+             compiletype this_obj)))
 
 #|
 M-state-funcall:
@@ -335,19 +336,20 @@ if operator is (name) -->
 
 ; Function evaluator, when it is used in an assignment statement
 (define M-value-function
-  (λ (expression state return-func next break continue throw)
+  (λ (expression state return-func next break continue throw compiletype this_obj)
          (M-state (closure-body (get-val (operand expression) state))
                   (create-bindings
                         (closure-params (get-val (operand expression) state))
                         (actualparams expression)
                         state
                         (addlayer ((closure-state-function (get-val (operand expression) state)) state))
-                        return-func next break continue throw)
+                        return-func next break continue throw compiletype this_obj)
                   (λ (val s) val)
                   (λ (s) (next state))
                   (λ (v) (error 'not-a-loop))
                   (λ (v) (error 'not-a-loop))
-                  (λ (e s) (throw e state)))))
+                  (λ (e s) (throw e state))
+                  compiletype this_obj)))
 
 ; Get the variables defined in a class body
 ; TESTING
@@ -439,7 +441,7 @@ M-STATE HELPER FUNCTIONS
       (funcclosures (class-closure-func-closures classclosure))
       (varexprs (class-closure-var-exprs classclosure))
       (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
-      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))]
+      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
       (list rt-type (vals (firstlayer definedvarstate))))))
     
     
