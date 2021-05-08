@@ -11,7 +11,8 @@
 
  
     
-  
+(define instance-type
+  (lambda (closure) (car closure)))
  
 
 (define super-class
@@ -19,6 +20,9 @@
     (if (null? (caddr expression))
         '()
         (operand (caddr expression)))))
+
+(define class-name
+  (λ (expression) (cadr expression)))
 
 (define class-body
   (λ (expression) (cadddr expression)))
@@ -63,6 +67,9 @@ FUNCTION ANATOMY HELPERS
 (define static-function?
   (λ (expression)
     (eq? 'static-function (operator expression))))
+
+(define static-function-closure?
+  (λ (closure) (list-ref closure 4)))
 
 
 #|

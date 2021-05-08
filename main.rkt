@@ -147,13 +147,23 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((throw? expression) (throw (M-value (throwvalue expression) state return-func next break continue throw compiletype this_obj) state))
       ((break? expression) (break state))
       ((continue? expression) (continue state))
-      ((function? expression) (next (M-state-function expression state)))
+      ((function? expression) (next (M-state-function expression state compiletype #t)))
+      ((static-function? expression) (next (M-state-function expression state compiletype #f)))
       ((funcall? expression) (M-state-funcall expression state return-func next break continue throw compiletype this_obj))
-      ((dot? expression) -1) 
+      ;((dot? expression) -1) 
       (else error 'unsupported-statement)
     )))
 
-
+; (define M-state-dot
+;   ; (funcall (dot a f) 3 5)
+;   (λ (expression state return-func next break continue throw compiletype this_obj)
+;     (letrec
+;       [
+;         (calling_obj (get-val (leftoperand expression) state) ; this could potentially be M-state since we are calling (new A() or a result of a func call)
+;         (calling_classclosure (get-val (instance-type calling_obj) state))
+;         (calling_compiletype (class-name calling_classclosure))
+;       ]
+;       (M-state )))
 
 ; The "vanguard" of the interpreter: initial pass-through to bind global variables and functions
 (define M-state-init
@@ -166,15 +176,15 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; @author Alex (let me know if this idea sux)
 ; Creates the bindings for a single class
-(define M-class-init
-  (λ (expression state next)
-    (cond
-      ((null? expression) (next state))
-      ((statement? expression) (M-class-init (car expression) state (λ (s) (M-class-init (cdr expression) s next))))
-      ((declare? expression) (next (class-declaration expression state)))
-      ((function? expression) (next (M-state-function expression state)))
-      ((static-function? expression) (next (M-state-function expression state)))
-      (else (error 'bad)))))
+; (define M-class-init
+;   (λ (expression state next)
+;     (cond
+;       ((null? expression) (next state))
+;       ((statement? expression) (M-class-init (car expression) state (λ (s) (M-class-init (cdr expression) s next))))
+;       ((declare? expression) (next (class-declaration expression state)))
+;       ((function? expression) (next (M-state-function expression state compiletype #t)))
+;       ((static-function? expression) (next (M-state-function expression state compiletype #f)))
+;       (else (error 'bad)))))
 
 
 ; Like M-state-declare, except that it doesn't evaluate the expression if it's a declare + assign
@@ -189,7 +199,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 ; Generate state with class closure
 (define M-state-class
   (λ (expression state) 
-    (add (classname expression) (create-class-closure (super-class expression) (class-body expression)) state)))
+    (add (classname expression) (create-class-closure (super-class expression) (class-body expression) (class-name expression)) state)))
 #|
 (define M-state-instance
   (λ (closure state)
@@ -206,8 +216,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
                                                                              (M-state-instance (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
       ((declare? expression) (next (M-state-declare expression state return-func next break continue throw compiletype this_obj)))
       ((assign? expression) (next (M-state-assign expression state return-func next break continue throw compiletype this_obj)))
-      ((function? expression) (next (M-state-function expression state compiletype this_obj)))
-      ((static-function? expression) (next (M-state-function expression state compiletype this_obj)))
+      ((function? expression) (next (M-state-function expression state compiletype #f)))
+      ((static-function? expression) (next (M-state-function expression state compiletype #t)))
       (else (error 'm-state-instance)))))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
@@ -300,25 +310,37 @@ FUNCTION STUFF
       (else (error 'mismatch-params)))))
 
 (define M-state-function
-  (λ (expression state)
-    (add (funcname expression) (create-closure (funcname expression) (params expression) (funcbody expression) state) state)))
+  (λ (expression state compiletype is_static)
+    (letrec
+      [(funcparams (if is_static 
+                        (params expression)
+                        (cons 'this (params expression))))]
+      (add (funcname expression) (create-closure (funcname expression) funcparams (funcbody expression) state compiletype is_static) state))))
 
 ; Function evaluator, when the function stands alone
 (define M-state-funcall
   (λ (expression state return-func next break continue throw compiletype this_obj)
-    (M-state (closure-body (get-val (operand expression) state))
-             (create-bindings
-                   (closure-params (get-val (operand expression) state))
-                   (actualparams expression)
-                   state
-                   (addlayer ((closure-state-function (get-val (operand expression) state)) state))
-                   return-func next break continue throw)
-             (λ (val s) (next state))
-             (λ (s) (next state))
-             (λ (v) (error 'not-a-loop))
-             (λ (v) (error 'not-a-loop))
-             (λ (e s) (throw e state))
-             compiletype this_obj)))
+    (letrec
+        [
+          (classclosure (get-val (instance-type this_obj) state))
+          (funcclosure (get-val-layer (operand expression)
+                                      (list (class-closure-func-names classclosure) 
+                                            (class-closure-func-closures classclosure))))
+          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
+        ]
+        (M-state (closure-body funcclosure)
+                (create-bindings
+                      (closure-params funcclosure)
+                      actual-params
+                      state
+                      (addlayer ((closure-state-function funcclosure) state))
+                      return-func next break continue throw)
+                (λ (val s) (next state))
+                (λ (s) (next state))
+                (λ (v) (error 'not-a-loop))
+                (λ (v) (error 'not-a-loop))
+                (λ (e s) (throw e state))
+                compiletype this_obj))))
 
 #|
 M-state-funcall:
@@ -335,21 +357,32 @@ if operator is (name) -->
 |#
 
 ; Function evaluator, when it is used in an assignment statement
+#|
+  From this_obj, find its class closure
+|#
 (define M-value-function
   (λ (expression state return-func next break continue throw compiletype this_obj)
-         (M-state (closure-body (get-val (operand expression) state))
-                  (create-bindings
-                        (closure-params (get-val (operand expression) state))
-                        (actualparams expression)
-                        state
-                        (addlayer ((closure-state-function (get-val (operand expression) state)) state))
-                        return-func next break continue throw compiletype this_obj)
-                  (λ (val s) val)
-                  (λ (s) (next state))
-                  (λ (v) (error 'not-a-loop))
-                  (λ (v) (error 'not-a-loop))
-                  (λ (e s) (throw e state))
-                  compiletype this_obj)))
+      (letrec
+        [
+          (classclosure (get-val (instance-type this_obj) state))
+          (funcclosure (get-val-layer (operand expression) 
+                                      (list (class-closure-func-names classclosure) 
+                                            (class-closure-func-closures classclosure))))
+          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
+        ]
+        (M-state (closure-body funcclosure)
+                (create-bindings
+                      (closure-params funcclosure)
+                      actual-params
+                      state
+                      (addlayer ((closure-state-function funcclosure) state))
+                      return-func next break continue throw compiletype this_obj)
+                (λ (val s) val)
+                (λ (s) (next state))
+                (λ (v) (error 'not-a-loop))
+                (λ (v) (error 'not-a-loop))
+                (λ (e s) (throw e state))
+                compiletype this_obj))))
 
 ; Get the variables defined in a class body
 ; TESTING
@@ -384,13 +417,13 @@ if operator is (name) -->
           (_ (parse-class-func-names (cdr body)))))))
 
 (define parse-class-func-closures
-  (λ (body)
+  (λ (body classname)
     (if (null? body)
         body
         (match (car body)
-          ((list 'function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
-          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
-          (_ (parse-class-func-closures (cdr body)))))))
+          ((list 'function name param funcbody) (cons (box (create-closure name (cons 'this param) funcbody (createnewstate) classname #f)) (parse-class-func-closures (cdr body) classname)))
+          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate) classname #t)) (parse-class-func-closures (cdr body) classname)))
+          (_ (parse-class-func-closures (cdr body) classname))))))
 
 
 ; helper function: parse class property by inserting a function that takes a class body and a state
@@ -428,7 +461,7 @@ M-STATE HELPER FUNCTIONS
 
 ; Function closure 3-tuple (params, body, λ(state) -> state)
 (define create-closure
-  (λ (name params body state) (list params body (λ (v) (cut-until-layer name v)))))
+  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) (get-val cls state)) is_static)))
 
 ; contain the instance's class (i.e. the run-time type or the true type) 
 ; and a list of instance field VALUES.
@@ -466,14 +499,14 @@ M-state-instance (expression correpondng to fields and methods in class-closure)
 ; the list of methods/function names and closures, 
 ; and (optionally) a list of class field names/values and a list of constructors
 (define create-class-closure
-  (λ (super-class body) (list super-class 
+  (λ (super-class body classname) (list super-class 
                               (parse-class-var-names body)
                               (parse-class-var-exprs body)
                               (parse-class-func-names body)
-                              (parse-class-func-closures body))))
+                              (parse-class-func-closures body classname))))
 
-(define get-class-bindings
-  (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
+; (define get-class-bindings
+;   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
 
 ; Returns the portion of the state that contains x
 (define cut-until-layer
