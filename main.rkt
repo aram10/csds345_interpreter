@@ -1,6 +1,7 @@
 #lang racket
 
 (provide (all-defined-out))
+(require racket/match)
 (require "classParser.rkt" "helpers.rkt")
 
 #|
@@ -20,12 +21,17 @@ INTERPRETER
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
 
+
+(define interpret2
+  (λ (filename)
+    (M-state-init (parser filename) (createnewstate) (λ (v) v))))
+
+
 (define interpret
   (λ (filename classname)
     (letrec
         ((globalstate (M-state-init (parser filename) (createnewstate) (λ (v) v) )))
-      (M-value-function '(funcall main) globalstate (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
-      
+      (M-state '(dot classname main) globalstate (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception))))))
 
 #|
 M-VALUE EXPRESSIONS
@@ -101,6 +107,7 @@ M-VALUE EXPRESSIONS
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw))
       ((comparison? expression) (M-compare expression state return-func next break continue throw))
       ((funcall? expression) (M-value-function expression state return-func next break continue throw))
+      ((new? expression) (create-instance-closure)) ;TODO
       (else (error 'bad-argument)))))
 
 #|
@@ -136,8 +143,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((continue? expression) (continue state))
       ((function? expression) (next (M-state-function expression state)))
       ((funcall? expression) (M-state-funcall expression state return-func next break continue throw))
+      ((dot? expression) -1) 
       (else error 'unsupported-statement)
     )))
+
+
 
 ; The "vanguard" of the interpreter: initial pass-through to bind global variables and functions
 (define M-state-init
@@ -148,11 +158,51 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((class? expression) (next (M-state-class expression state)))
       (else (error 'bad-class-declaration)))))
 
-(define M-state-class
+; @author Alex (let me know if this idea sux)
+; Creates the bindings for a single class
+(define M-class-init
+  (λ (expression state next)
+    (cond
+      ((null? expression) (next state))
+      ((statement? expression) (M-class-init (car expression) state (λ (s) (M-class-init (cdr expression) s next))))
+      ((declare? expression) (next (class-declaration expression state)))
+      ((function? expression) (next (M-state-function expression state)))
+      ((static-function? expression) (next (M-state-function expression state)))
+      (else (error 'bad)))))
+
+
+; Like M-state-declare, except that it doesn't evaluate the expression if it's a declare + assign
+(define class-declaration
   (λ (expression state)
-    ; generate state w class closure
+    (match expression
+      ;((not (declare? expression)) (error 'not-a-declaration))
+      ((list 'var name) (declare (operand expression) state))
+      ((list 'var name expr) (add (leftoperand expression) (rightoperand expression) state))
+      (_ (error 'bad-declaration)))))
+
+; Generate state with class closure
+(define M-state-class
+  (λ (expression state) 
     (add (classname expression) (create-class-closure (super-class expression) (class-body expression)) state)))
- 
+#|
+(define M-state-instance
+  (λ (closure state)
+    (letrec
+        ((body (class-closure-body closure))
+         (newstate (M-state 
+|#
+
+(define M-state-instance
+  (λ (expression state return-func next break continue throw)
+    (cond
+      ((null? expression) (next state))
+      ((statement? expression) (M-state-instance (car expression) state return-func (λ (s)
+                                                                             (M-state-instance (cdr expression) s return-func next break continue throw)) break continue throw))
+      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw)))
+      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw)))
+      ((function? expression) (next (M-state-function expression state)))
+      ((static-function? expression) (next (M-state-function expression state)))
+      (else (error 'm-state-instance)))))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
@@ -216,7 +266,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
                                      (λ (s1) (M-state (finallyblock expression) s1 return-func continue break continue throw))
                                      ;newThrow
                                      (λ (e1 s1) (M-state (finallyblock expression) s1 return-func (λ (s2) (throw e1 s2)) break continue throw)))))))
-
 
 ; Evaluates the result of a while statement
 (define M-state-while
@@ -294,6 +343,34 @@ if operator is (name) -->
                   (λ (v) (error 'not-a-loop))
                   (λ (e s) (throw e state)))))
 
+; Get the variables defined in a class body
+; TESTING
+(define parse-class-var
+  (λ (body state)
+    (if (null? body)
+        state
+        (match (car body)
+          ((list 'var name) (parse-class-var (cdr body) (add name (list 'var name) state)))
+          ((list 'var name expr) (parse-class-var (cdr body) (add name (list 'var name expr) state)))
+          (_ (parse-class-var (cdr body) state))))))
+
+
+; Get the functions defined in a class body
+; TESTING
+(define parse-class-func
+  (λ (body state)
+    (if (null? body)
+        state
+        (match (car body)
+          ((list 'function name param funcbody) (parse-class-func (cdr body) (M-state-function (list 'function name param funcbody) state)))
+          ((list 'static-function name param funcbody) (parse-class-func (cdr body) (M-state-function (list 'static-function name param funcbody) state)))
+          (_ (parse-class-func (cdr body) state))))))
+
+; helper function: parse class property by inserting a function that takes a class body and a state
+; returns a LAYER i.e ((var_names .... ) (parser_result....)) 
+(define parse-class-property
+  (λ (body parser-func) (firstlayer (parser-func body (createnewstate)))))
+             
 
 #|
 M-STATE HELPER FUNCTIONS
@@ -326,39 +403,45 @@ M-STATE HELPER FUNCTIONS
 (define create-closure
   (λ (name params body state) (list params body (λ (v) (cut-until-layer name v)))))
 
-#|
-class A{
-var h = 10;
-
-function x(a, b)
-{
-   return a + b;
-}
-
-function y(c, d)
-{
-   return c - d;
-}
-}
-
-( (main A) ((return 10) )
-
-( (() ((h x y) (10 (a b (return a + b) λ(s)) (c d (return c - d) λ(s))))) )
-
-a = new A();
-b = new A();
-
-|#
-
-
+; TESTING
 (define create-instance-closure
-  (λ (rt-type values) (list rt-type values)))
+  (λ (rt-type state) (list rt-type (instance-val (cadr (get-val rt-type state)) (createnewlayer) state))))
 
+; Run M-value on instances inside the class closure to generate the fields for instance closure
+; returns a layer i.e ((var_names .... ) (m_value_result....))
+; DOES NOT WORK
+(define instance-val
+  (λ (class-val layer state)
+    (if (null? (vars class-val))
+        layer
+        (instance-val (restpairs class-val) (add-to-layer (firstvar class-val)
+                                                          (M-state (firstval class-val) state (λ (val s) val) (λ (v) v)
+                                                                   (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))
+                                                          layer) (M-state (firstval class-val) state (λ (val s) val) (λ (v) v)
+                                                                   (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))))
+    
+    
+; (expression state next)
+  ; find class closure
+  ; call m-state-init on it
+  ; class-closure super name body ((x y z) ()) (main
+  ; for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
+#|
+M-state-init: Parses classes, and classes only
+M-state-class:
+     if declare: add (var name, expr) to state
+     if ...: add (name, expr) to state
+M-state-instance (expression correpondng to fields and methods in class-closure) : Need to generate fields with interpreted value ((x, y z) (#&4, ....))
+  for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
+|#
+                                                                  
+  
+; TESTING
 (define create-class-closure
-  (λ (super-class body) (list super-class (get-class-bindings body))))
+  (λ (super-class body) (list super-class (parse-class-property (reverse body) parse-class-var)  (parse-class-property (reverse body) parse-class-func))))
 
 (define get-class-bindings
-  (λ (body) (M-state-init body (createnewstate) (λ (v) v))))
+  (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
 
 ; Returns the portion of the state that contains x
 (define cut-until-layer

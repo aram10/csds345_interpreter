@@ -1,5 +1,6 @@
 #lang racket
 
+(require racket/match)
 (provide (all-defined-out))
 
 ; λ: 'Ctrl + \'
@@ -7,6 +8,10 @@
 ;(class A () ((var x 1) (var y 2) (function m () ((return (funcall (dot this m2))))) (function m2 () ((return (+ x y)))))
 ;(class B (extends A) ((var y 22) (var z 3) (function m () ((return (funcall (dot super m))))) (function m2 () ((return (+ (+ x y) z))))))
 
+
+ 
+    
+  
  
 
 (define super-class
@@ -17,6 +22,9 @@
 
 (define class-body
   (λ (expression) (cadddr expression)))
+
+(define class-closure-body
+  (λ (expression) (cadr expression)))
 
 
 
@@ -186,6 +194,9 @@ EXPRESSION TYPE HELPERS
 (define declare?
   (λ (expr) (eq? (operator expr) 'var)))
 
+(define dot?
+  (λ (expr) (eq? (operator expr) 'dot)))
+
 ; Determines whether an expression is a function call
 (define funcall?
   (λ (expression) (eq? (operator expression) 'funcall)))
@@ -197,6 +208,10 @@ EXPRESSION TYPE HELPERS
 ; Determines whether an expression is an if statement
 (define if?
   (λ (expr) (eq? (operator expr) 'if)))
+
+; Determines if an expression is constructing an object with 'new'
+(define new?
+  (λ (expr) (eq? (operator expr) 'new)))
 
 ; Determines whether an expression is a return statement
 (define return?
@@ -400,7 +415,11 @@ BOOLEAN HELPER FUNCTIONS
       ((eq? a 'false) #f)
       (else (error 'not-a-bool)))))
 
-
+(define reverse
+  (lambda (lat)
+    (cond
+      ((null? lat) '())
+      (else (append (reverse (cdr lat)) (cons (car lat) '()))))))
 
 #|
 GENERIC HELPER FUNCTIONS
