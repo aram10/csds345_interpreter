@@ -351,44 +351,44 @@ if operator is (name) -->
 
 ; Get the variables defined in a class body
 ; TESTING
-(define parse-class-var-expr
+(define parse-class-var-exprs
   (λ (body)
     (if (null? body)
         body
         (match (car body)
-          ((list 'var name) (cons (car body) (parse-class-var-expr (cdr body))))
-          ((list 'var name expr) (cons (car body) (parse-class-var-expr (cdr body))))
-          (_ (parse-class-var-expr (cdr body)))))))
+          ((list 'var name) (cons (car body) (parse-class-var-exprs (cdr body))))
+          ((list 'var name expr) (cons (car body) (parse-class-var-exprs (cdr body))))
+          (_ (parse-class-var-exprs (cdr body)))))))
 
-(define parse-class-var-name
+(define parse-class-var-names
   (λ (body)
     (if (null? body)
         body
         (match (car body)
-          ((list 'var name) (cons name (parse-class-var-name (cdr body))))
-          ((list 'var name expr) (cons name (parse-class-var-name (cdr body))))
-          (_ (parse-class-var-name (cdr body)))))))
+          ((list 'var name) (cons name (parse-class-var-names (cdr body))))
+          ((list 'var name expr) (cons name (parse-class-var-names (cdr body))))
+          (_ (parse-class-var-names (cdr body)))))))
 
 
 ; Get the functions defined in a class body
 ; TESTING
-(define parse-class-func-name
+(define parse-class-func-names
   (λ (body)
     (if (null? body)
         body
         (match (car body)
-          ((list 'function name param funcbody) (cons name (parse-class-func-name (cdr body))))
-          ((list 'static-function name param funcbody) (cons name (parse-class-func-name (cdr body))))
-          (_ (parse-class-func-name (cdr body)))))))
+          ((list 'function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          ((list 'static-function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          (_ (parse-class-func-names (cdr body)))))))
 
-(define parse-class-func-closure
+(define parse-class-func-closures
   (λ (body)
     (if (null? body)
         body
         (match (car body)
-          ((list 'function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closure (cdr body))))
-          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closure (cdr body))))
-          (_ (parse-class-func-closure (cdr body)))))))
+          ((list 'function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
+          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate))) (parse-class-func-closures (cdr body))))
+          (_ (parse-class-func-closures (cdr body)))))))
 
 
 ; helper function: parse class property by inserting a function that takes a class body and a state
@@ -465,10 +465,10 @@ M-state-instance (expression correpondng to fields and methods in class-closure)
 ; and (optionally) a list of class field names/values and a list of constructors
 (define create-class-closure
   (λ (super-class body) (list super-class 
-                              (parse-class-var-name body)
-                              (parse-class-var-expr body)
-                              (parse-class-func-name body)
-                              (parse-class-func-closure body))))
+                              (parse-class-var-names body)
+                              (parse-class-var-exprs body)
+                              (parse-class-func-names body)
+                              (parse-class-func-closures body))))
 
 (define get-class-bindings
   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
