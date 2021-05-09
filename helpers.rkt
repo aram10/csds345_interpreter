@@ -310,7 +310,10 @@
          (field-index (class-field-index compiletype fieldname state))
          (field-value-box (list-ref (instance-values obj) field-index))
       ]
-      (set-box! field-value-box new-val))))
+      (begin
+        (set-box! field-value-box new-val)
+        state))))
+        
 
 (define get-instance-field
   (λ (obj fieldname compiletype state)
@@ -489,6 +492,12 @@ MODULAR HELPERS
 
 (define instance-values
   (lambda (closure) (cadr closure)))
+
+; Checks if a variable is a member of a class
+(define local-var?
+  (λ (classname x state)
+    (member? x (class-closure-var-names (get-val classname state)))))
+    
 
 (define newruntimetype cadr)
 

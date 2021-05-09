@@ -108,7 +108,10 @@ M-VALUE EXPRESSIONS
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ; (+ x 5) -> (+ (dot this x) 5)
+      ; x
+      ; (9 1 5 2)  x
       ((declared? expression state) (get-val expression state)); change
+      ((local-var? compiletype expression state) (get-instance-field this_obj expression compiletype state))
       ((bool? expression) expression)
       ((arithmetic? expression) (M-integer expression state return-func next break continue throw compiletype this_obj))
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw compiletype this_obj))
@@ -116,6 +119,9 @@ M-VALUE EXPRESSIONS
       ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((new? expression) (create-instance-closure (newruntimetype expression) state))
       ((instance-closure? expression) expression)
+      ((dot? expression) (get-instance-field
+                                  (dot-closure expression state return-func next break continue throw compiletype this_obj)
+                                  (dot-member-name expression) compiletype state))
       (else (begin (println expression) (error 'bad-argument))))))
 
 #|
@@ -171,6 +177,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((not (assign? expression)) (error 'not-an-assignment))
+      ((dot? (assignvar expression)) (update-instance-field
+                                  (dot-closure (assignvar expression) state return-func next break continue throw compiletype this_obj)
+                                  (dot-member-name (assignvar expression))
+                                  (M-value (assignexp expression) state return-func next break continue throw compiletype this_obj)
+                                  compiletype state)) 
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
       ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
@@ -284,6 +295,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define dot-closure
   (lambda (expr state return-func next break continue throw compiletype this_obj)
     (match expr
+      ((list 'dot 'this _) this_obj)
       ((list 'dot objexpr _) (M-value objexpr state return-func next break continue throw compiletype this_obj))
       (_ this_obj))))
 
@@ -366,28 +378,29 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (letrec
         [
-          (debug (begin (println state) '()))
+          (debug (begin (println state) (println expression)'()))
           ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
-          (funcclosure (get-val-layer (dot-member-name expression)
+          (funcclosure (get-val-layer (dot-member-name (operand expression))
                                       (list (class-closure-func-names classclosure) 
                                             (class-closure-func-closures classclosure))))
-          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
-          (current_compiletype (class-name (closure-class-lookup-function funcclosure)))
+          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons current_obj (actualparams expression))))
+          (current_compiletype ((closure-class-lookup-function funcclosure) state))
+          (currentstate (add (dot-member-name (operand expression)) funcclosure (addlayer state)))
         ]
         (M-state (closure-body funcclosure)
                 (create-bindings
                       (closure-params funcclosure)
                       actual-params
-                      state
-                      (addlayer ((closure-state-function funcclosure) state))
+                      currentstate
+                      (addlayer ((closure-state-function funcclosure) currentstate))
                       return-func next break continue throw current_compiletype current_obj)
-                (λ (val s) (next state))
-                (λ (s) (next state))
+                (λ (val s) (next currentstate))
+                (λ (s) (next currentstate))
                 (λ (v) (error 'not-a-loop))
                 (λ (v) (error 'not-a-loop))
-                (λ (e s) (throw e state))
+                (λ (e s) (throw e currentstate))
                 current_compiletype current_obj))))
 
 ; Handle initialization of class functions
