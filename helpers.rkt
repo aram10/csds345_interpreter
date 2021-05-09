@@ -299,6 +299,30 @@
 (define update
   (λ (x v state) (update-cps x v state (λ (q) q))))
 
+
+(define update-instance-field
+  (λ (obj fieldname new-val compiletype state)
+    ; step 1: find class closure
+    ; step 2: instance (A (box val, box val)) class: (() (name1, name2) (expr1, expr2) ....)
+    (letrec
+      [
+         (class-closure (get-val compiletype state))
+         (field-index (class-field-index compiletype fieldname state))
+         (field-value-box (list-ref (instance-values obj) field-index))
+      ]
+      (set-box! field-value-box new-val))))
+
+(define get-instance-field
+  (λ (obj fieldname compiletype state)
+    (letrec
+      [
+         (class-closure (get-val compiletype state))
+         (field-index (class-field-index compiletype fieldname state))
+         (field-value-box (list-ref (instance-values obj) field-index))
+      ]
+      (unbox field-value-box))))
+
+
 ; Updates the binding of the given variable in the state
 (define update-cps
   (λ (x v state return)
@@ -422,3 +446,92 @@ owo what's this
 
 (define while?
   (λ (expr) (eq? (operator expr) 'while)))
+
+
+
+; FUTURE ALEX: reorg this -past Alex
+
+#|
+MODULAR HELPERS
+|#
+
+(define class-body
+  (λ (expression) (cadddr expression)))
+
+(define class-closure-body
+  (λ (expression) (cadr expression)))
+
+(define class-closure-func-names cadddr)
+
+(define class-closure-var-names cadr)
+
+(define class-closure-var-exprs caddr)
+
+(define class-closure-func-closures 
+  (lambda (closure) (list-ref closure 4)))
+
+; helper to, given a class and a var name, returns the index that the var name is stored at
+(define class-field-index
+  (λ (cname field state)
+    (- (length (class-closure-var-names (get-val cname state))) (class-field-index-helper (class-closure-var-names (get-val cname state)) field 1))))
+
+(define class-field-index-helper
+  (λ (class-vars field acc)
+    (if (eq? (car class-vars) field)
+        acc
+        (class-field-index-helper (cdr class-vars) field (+ 1 acc)))))
+
+(define class-name
+  (λ (expression) (cadr expression)))
+
+(define instance-type
+  (lambda (closure) (car closure)))
+
+(define instance-values
+  (lambda (closure) (cadr closure)))
+
+(define newruntimetype cadr)
+
+; parse class property by inserting a function that takes a class body and a state, returns a layer
+(define parse-class-property
+  (λ (body parser-func) (parser-func body (createnewstate))))
+
+(define super-class
+  (λ (expression)
+    (if (null? (caddr expression))
+        '()
+        (operand (caddr expression)))))
+
+#|
+FUNCTIONAL HELPERS
+|#
+
+; Gets the actual params of a function call
+(define actualparams
+  (λ (expression) (cddr expression)))
+
+; Gets the function body
+(define closure-body
+  (λ (closure) (cadr closure)))
+
+; Gets the λ-classlookup out of the closure
+(define closure-class-lookup-function
+  (λ (closure) (cadddr closure)))
+
+; Gets the function params out of the closure
+(define closure-params
+  (λ (closure) (car closure)))
+
+; Gets the λ out of the closure
+(define closure-state-function
+  (λ (closure) (caddr closure)))
+
+; Function closure 3-tuple (params, body, λ(state) -> state)
+(define create-closure
+  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) cls) is_static)))
+
+; Gets the body of a function
+(define funcbody (λ (expression) (cadddr expression)))
+
+; Gets the name of a function
+(define funcname (λ (expression) (cadr expression)))

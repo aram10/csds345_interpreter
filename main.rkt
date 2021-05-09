@@ -107,7 +107,8 @@ M-VALUE EXPRESSIONS
 (define M-value
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
-      ((declared? expression state) (get-val expression state))
+      ; (+ x 5) -> (+ (dot this x) 5)
+      ((declared? expression state) (get-val expression state)); change
       ((bool? expression) expression)
       ((arithmetic? expression) (M-integer expression state return-func next break continue throw compiletype this_obj))
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw compiletype this_obj))
@@ -261,7 +262,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 ; and (optionally) a list of class field names/values and a list of constructors
 (define create-class-closure
   (λ (super-class body classname) (list super-class 
-                              (parse-class-var-names body)
+                              (parse-class-var-names body '())
                               (parse-class-var-exprs body)
                               (parse-class-func-names body)
                               (parse-class-func-closures body classname))))
@@ -276,7 +277,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       (varexprs (class-closure-var-exprs classclosure))
       (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
       (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
-      (list rt-type (vals (firstlayer definedvarstate)) 'instance-closure))))
+      (list rt-type (reverse (vals (firstlayer definedvarstate))) 'instance-closure))))
 
 ; Gets instance of LHS of dot expression
 ; Currently DOES NOT work with static references to classes
@@ -296,7 +297,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 ; Generate state with class closure
 (define M-state-class
   (λ (expression state) 
-    (add (classname expression) (create-class-closure (super-class expression) (class-body expression) (class-name expression)) state)))
+    (add (class-name expression) (create-class-closure (super-class expression) (class-body expression) (class-name expression)) state)))
 
 ; Create closure of functions in class body
 (define parse-class-func-closures
@@ -333,68 +334,13 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 ; Get the variable names in a class body
 ; TESTING
 (define parse-class-var-names
-  (λ (body)
+  (λ (body acc)
     (if (null? body)
-        body
+        acc
         (match (car body)
-          ((list 'var name) (cons name (parse-class-var-names (cdr body))))
-          ((list 'var name expr) (cons name (parse-class-var-names (cdr body))))
-          (_ (parse-class-var-names (cdr body)))))))
-
-
-
-#|
-GRAVEYARD
-|#
-
-; (define M-state-dot
-;   ; (funcall (dot a f) 3 5)
-;   (λ (expression state return-func next break continue throw compiletype this_obj)
-;     (letrec
-;       [
-;         (calling_obj (get-val (leftoperand expression) state) ; this could potentially be M-state since we are calling (new A() or a result of a func call)
-;         (calling_classclosure (get-val (instance-type calling_obj) state))
-;         (calling_compiletype (class-name calling_classclosure))
-;       ]
-;       (M-state )))
-
-#|
-(define M-state-instance
-  (λ (closure state)
-    (letrec
-        ((body (class-closure-body closure))
-         (newstate (M-state 
-|#
-
-; (expression state next)
-  ; find class closure
-  ; call m-state-init on it
-  ; class-closure super name body ((x y z) ()) (main
-  ; for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
-#|
-M-state-init: Parses classes, and classes only
-M-state-class:
-     if declare: add (var name, expr) to state
-     if ...: add (name, expr) to state
-M-state-instance (expression correpondng to fields and methods in class-closure) : Need to generate fields with interpreted value ((x, y z) (#&4, ....))
-  for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
-|#
-
-; (define get-class-bindings
-;   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
-
-; IS THIS NEEDED???
-(define M-state-instance
-  (λ (expression state return-func next break continue throw compiletype this_obj)
-    (cond
-      ((null? expression) (next state))
-      ((statement? expression) (M-state-instance (car expression) state return-func (λ (s)
-                                                                             (M-state-instance (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
-      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw compiletype this_obj)))
-      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw compiletype this_obj)))
-      ((function? expression) (next (M-state-function expression state compiletype #f)))
-      ((static-function? expression) (next (M-state-function expression state compiletype #t)))
-      (else (error 'm-state-instance)))))
+          ((list 'var name) (parse-class-var-names (cdr body) (cons name acc)))
+          ((list 'var name expr) (parse-class-var-names (cdr body) (cons name acc)))
+          (_ (parse-class-var-names (cdr body) acc))))))
 
 
 #| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -500,77 +446,3 @@ M-state-instance (expression correpondng to fields and methods in class-closure)
                   (λ (v) (error 'not-a-loop))
                   (λ (e s) (throw e state))
                   compiletype this_obj)))
-
-#|
-MODULAR HELPERS
-|#
-
-(define class-body
-  (λ (expression) (cadddr expression)))
-
-(define class-closure-body
-  (λ (expression) (cadr expression)))
-
-(define class-closure-func-names cadddr)
-
-(define class-closure-var-names cadr)
-
-(define class-closure-var-exprs caddr)
-
-(define class-closure-func-closures 
-  (lambda (closure) (list-ref closure 4)))
-
-; this is why i like to clean code
-(define class-name
-  (λ (expression) (cadr expression)))
-
-(define classname (λ (expression) (cadr expression)))
-
-(define instance-type
-  (lambda (closure) (car closure)))
-
-(define newruntimetype cadr)
-
-; parse class property by inserting a function that takes a class body and a state, returns a layer
-(define parse-class-property
-  (λ (body parser-func) (parser-func body (createnewstate))))
-
-(define super-class
-  (λ (expression)
-    (if (null? (caddr expression))
-        '()
-        (operand (caddr expression)))))
-
-#|
-FUNCTIONAL HELPERS
-|#
-
-; Gets the actual params of a function call
-(define actualparams
-  (λ (expression) (cddr expression)))
-
-; Gets the function body
-(define closure-body
-  (λ (closure) (cadr closure)))
-
-; Gets the λ-classlookup out of the closure
-(define closure-class-lookup-function
-  (λ (closure) (cadddr closure)))
-
-; Gets the function params out of the closure
-(define closure-params
-  (λ (closure) (car closure)))
-
-; Gets the λ out of the closure
-(define closure-state-function
-  (λ (closure) (caddr closure)))
-
-; Function closure 3-tuple (params, body, λ(state) -> state)
-(define create-closure
-  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) cls) is_static)))
-
-; Gets the body of a function
-(define funcbody (λ (expression) (cadddr expression)))
-
-; Gets the name of a function
-(define funcname (λ (expression) (cadr expression)))
