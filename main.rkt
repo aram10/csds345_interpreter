@@ -6,13 +6,13 @@
 (require "classParser.rkt" "helpers.rkt")
 
 #|
-CSDS 345 Simple Language Interpreter Project
+CSDS 345 Object-Oriented Language Interpreter Project
 
 Phan Trinh Ha
 Stamatis Papadopoulos
 Alexander Rambasek
 
-4/12/2021
+5/9/2021
 |#
 
 
@@ -47,7 +47,7 @@ M-VALUE EXPRESSIONS
 (define M-boolean
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
-      ((isbool? expression) expression)
+      ((bool? expression) expression)
       ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((declared? expression state) (get-val expression state))
       ((comparison? expression) (M-compare expression state return-func next break continue throw compiletype this_obj))
@@ -108,7 +108,7 @@ M-VALUE EXPRESSIONS
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
       ((declared? expression state) (get-val expression state))
-      ((isbool? expression) expression)
+      ((bool? expression) expression)
       ((arithmetic? expression) (M-integer expression state return-func next break continue throw compiletype this_obj))
       ((boolalg? expression) (M-boolean expression state return-func next break continue throw compiletype this_obj))
       ((comparison? expression) (M-compare expression state return-func next break continue throw compiletype this_obj))
@@ -155,16 +155,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       (else error 'unsupported-statement)
     )))
 
-; (define M-state-dot
-;   ; (funcall (dot a f) 3 5)
-;   (λ (expression state return-func next break continue throw compiletype this_obj)
-;     (letrec
-;       [
-;         (calling_obj (get-val (leftoperand expression) state) ; this could potentially be M-state since we are calling (new A() or a result of a func call)
-;         (calling_classclosure (get-val (instance-type calling_obj) state))
-;         (calling_compiletype (class-name calling_classclosure))
-;       ]
-;       (M-state )))
 
 ; The "vanguard" of the interpreter: initial pass-through to bind global variables and functions
 (define M-state-init
@@ -174,52 +164,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((statement? expression) (M-state-init (car expression) state (λ (s) (M-state-init (cdr expression) s next))))
       ((class? expression) (next (M-state-class expression state)))
       (else (error 'bad-class-declaration)))))
-
-; @author Alex (let me know if this idea sux)
-; Creates the bindings for a single class
-; (define M-class-init
-;   (λ (expression state next)
-;     (cond
-;       ((null? expression) (next state))
-;       ((statement? expression) (M-class-init (car expression) state (λ (s) (M-class-init (cdr expression) s next))))
-;       ((declare? expression) (next (class-declaration expression state)))
-;       ((function? expression) (next (M-state-function expression state compiletype #t)))
-;       ((static-function? expression) (next (M-state-function expression state compiletype #f)))
-;       (else (error 'bad)))))
-
-
-; Like M-state-declare, except that it doesn't evaluate the expression if it's a declare + assign
-(define class-declaration
-  (λ (expression state)
-    (match expression
-      ;((not (declare? expression)) (error 'not-a-declaration))
-      ((list 'var name) (declare (operand expression) state))
-      ((list 'var name expr) (add (leftoperand expression) (rightoperand expression) state))
-      (_ (error 'bad-declaration)))))
-
-; Generate state with class closure
-(define M-state-class
-  (λ (expression state) 
-    (add (classname expression) (create-class-closure (super-class expression) (class-body expression) (class-name expression)) state)))
-#|
-(define M-state-instance
-  (λ (closure state)
-    (letrec
-        ((body (class-closure-body closure))
-         (newstate (M-state 
-|#
-
-(define M-state-instance
-  (λ (expression state return-func next break continue throw compiletype this_obj)
-    (cond
-      ((null? expression) (next state))
-      ((statement? expression) (M-state-instance (car expression) state return-func (λ (s)
-                                                                             (M-state-instance (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
-      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw compiletype this_obj)))
-      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw compiletype this_obj)))
-      ((function? expression) (next (M-state-function expression state compiletype #f)))
-      ((static-function? expression) (next (M-state-function expression state compiletype #t)))
-      (else (error 'm-state-instance)))))
 
 ; Evaluates an assignment expression that may contain arithmetic/boolean expressions and updates the state
 (define M-state-assign
@@ -294,8 +238,168 @@ necessary updates to the state, and evaluates to the special variable 'return, o
             (λ (s2) (M-state-while expression s2 return-func next break continue throw compiletype this_obj)) throw compiletype this_obj)
       (next state))))
 
+
+#| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                     MODULAR
+   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+|#
+
+
+; Like M-state-declare, except that it doesn't evaluate the expression if it's a declare + assign
+(define class-declaration
+  (λ (expression state)
+    (match expression
+      ;((not (declare? expression)) (error 'not-a-declaration))
+      ((list 'var name) (declare (operand expression) state))
+      ((list 'var name expr) (add (leftoperand expression) (rightoperand expression) state))
+      (_ (error 'bad-declaration)))))
+
+; define class closures
+; the parent/super class, 
+; the list of instance field names and the expressions that compute their initial values (if any), 
+; the list of methods/function names and closures, 
+; and (optionally) a list of class field names/values and a list of constructors
+(define create-class-closure
+  (λ (super-class body classname) (list super-class 
+                              (parse-class-var-names body)
+                              (parse-class-var-exprs body)
+                              (parse-class-func-names body)
+                              (parse-class-func-closures body classname))))
+
+; contain the instance's class and a list of instance field VALUES.
+(define create-instance-closure
+  (λ (rt-type state) 
+    (letrec
+      [(classclosure (get-val rt-type state))
+      (funcnames (class-closure-func-names classclosure))
+      (funcclosures (class-closure-func-closures classclosure))
+      (varexprs (class-closure-var-exprs classclosure))
+      (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
+      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
+      (list rt-type (vals (firstlayer definedvarstate)) 'instance-closure))))
+
+; Gets instance of LHS of dot expression
+; Currently DOES NOT work with static references to classes
+(define dot-closure
+  (lambda (expr state return-func next break continue throw compiletype this_obj)
+    (match expr
+      ((list 'dot objexpr _) (M-value objexpr state return-func next break continue throw compiletype this_obj))
+      (_ this_obj))))
+
+; Deals with RHS of dot expression
+(define dot-member-name
+  (lambda (expr)
+    (match expr
+      ((list 'dot objexpr mem) mem)
+      (_ expr))))
+
+; Generate state with class closure
+(define M-state-class
+  (λ (expression state) 
+    (add (classname expression) (create-class-closure (super-class expression) (class-body expression) (class-name expression)) state)))
+
+; Create closure of functions in class body
+(define parse-class-func-closures
+  (λ (body classname)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'function name param funcbody) (cons (box (create-closure name (cons 'this param) funcbody (createnewstate) classname #f)) (parse-class-func-closures (cdr body) classname)))
+          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate) classname #t)) (parse-class-func-closures (cdr body) classname)))
+          (_ (parse-class-func-closures (cdr body) classname))))))
+
+; Get the functions defined in a class body
+; TESTING
+(define parse-class-func-names
+  (λ (body)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          ((list 'static-function name param funcbody) (cons name (parse-class-func-names (cdr body))))
+          (_ (parse-class-func-names (cdr body)))))))
+
+; Get the variable expressions in a class body
+; TESTING
+(define parse-class-var-exprs
+  (λ (body)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'var name) (cons (car body) (parse-class-var-exprs (cdr body))))
+          ((list 'var name expr) (cons (car body) (parse-class-var-exprs (cdr body))))
+          (_ (parse-class-var-exprs (cdr body)))))))
+
+; Get the variable names in a class body
+; TESTING
+(define parse-class-var-names
+  (λ (body)
+    (if (null? body)
+        body
+        (match (car body)
+          ((list 'var name) (cons name (parse-class-var-names (cdr body))))
+          ((list 'var name expr) (cons name (parse-class-var-names (cdr body))))
+          (_ (parse-class-var-names (cdr body)))))))
+
+
+
 #|
-FUNCTION STUFF
+GRAVEYARD
+|#
+
+; (define M-state-dot
+;   ; (funcall (dot a f) 3 5)
+;   (λ (expression state return-func next break continue throw compiletype this_obj)
+;     (letrec
+;       [
+;         (calling_obj (get-val (leftoperand expression) state) ; this could potentially be M-state since we are calling (new A() or a result of a func call)
+;         (calling_classclosure (get-val (instance-type calling_obj) state))
+;         (calling_compiletype (class-name calling_classclosure))
+;       ]
+;       (M-state )))
+
+#|
+(define M-state-instance
+  (λ (closure state)
+    (letrec
+        ((body (class-closure-body closure))
+         (newstate (M-state 
+|#
+
+; (expression state next)
+  ; find class closure
+  ; call m-state-init on it
+  ; class-closure super name body ((x y z) ()) (main
+  ; for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
+#|
+M-state-init: Parses classes, and classes only
+M-state-class:
+     if declare: add (var name, expr) to state
+     if ...: add (name, expr) to state
+M-state-instance (expression correpondng to fields and methods in class-closure) : Need to generate fields with interpreted value ((x, y z) (#&4, ....))
+  for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
+|#
+
+; (define get-class-bindings
+;   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
+
+; IS THIS NEEDED???
+(define M-state-instance
+  (λ (expression state return-func next break continue throw compiletype this_obj)
+    (cond
+      ((null? expression) (next state))
+      ((statement? expression) (M-state-instance (car expression) state return-func (λ (s)
+                                                                             (M-state-instance (cdr expression) s return-func next break continue throw compiletype this_obj)) break continue throw compiletype this_obj))
+      ((declare? expression) (next (M-state-declare expression state return-func next break continue throw compiletype this_obj)))
+      ((assign? expression) (next (M-state-assign expression state return-func next break continue throw compiletype this_obj)))
+      ((function? expression) (next (M-state-function expression state compiletype #f)))
+      ((static-function? expression) (next (M-state-function expression state compiletype #t)))
+      (else (error 'm-state-instance)))))
+
+
+#| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                     FUNCTIONAL
+   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 |#
 
 ; Bind the formal parameters to the actual parameters
@@ -309,29 +413,6 @@ FUNCTION STUFF
                                                    (add (car formalparams) (M-value (car actualparams) state return-func next break continue throw compiletype this_obj) fstate1)
                                                    return-func next break continue throw compiletype this_obj))
       (else (error 'mismatch-params)))))
-
-(define M-state-function
-  (λ (expression state compiletype is_static)
-    (letrec
-      [(funcparams (if is_static 
-                        (params expression)
-                        (cons 'this (params expression))))]
-      (add (funcname expression) (create-closure (funcname expression) funcparams (funcbody expression) state compiletype is_static) state))))
-
-(define dot-closure
-  (lambda (expr state return-func next break continue throw compiletype this_obj)
-    (match expr
-      ; assume obj instance
-      ; in later impl, if sees class, do different handling by looking up in the state
-      ((list 'dot objexpr _) (M-value objexpr state return-func next break continue throw compiletype this_obj))
-      (_ this_obj))))
-
-(define dot-member-name
-  (lambda (expr)
-    (match expr
-      ; a.x, a.f(), new A().something
-      ((list 'dot objexpr mem) mem)
-      (_ expr))))
 
 ; Function evaluator, when the function stands alone
 ; MAKE THIS USE THE SAME LETREC AS M_STATE_FUNCTION
@@ -363,24 +444,16 @@ FUNCTION STUFF
                 (λ (e s) (throw e state))
                 current_compiletype current_obj))))
 
-#|
-M-state-funcall:
-	M-state (closure-body (operator exp) state) (create-bindings ....)
+; Handle initialization of class functions
+(define M-state-function
+  (λ (expression state compiletype is_static)
+    (letrec
+      [(funcparams (if is_static 
+                        (params expression)
+                        (cons 'this (params expression))))]
+      (add (funcname expression) (create-closure (funcname expression) funcparams (funcbody expression) state compiletype is_static) state))))
 
-closure-body -> parse tree for function body
-create-bindings -> return state with function params added in an extra layer
 
-if operator is (dot obj funcname) --> 
-	obj-function-closure <- find function closure from instance closure
-	(closure-body) -> get the function body from instance closure
-	(create-binding closure) -> gets the function params from the instance closure, adds obj as this to list of actual-params, add layer to state 
-if operator is (name) --> 
-|#
-
-; Function evaluator, when it is used in an assignment statement
-#|
-  From this_obj, find its class closure
-|#
 (define M-value-function
   (λ (expression state return-func next break continue throw compiletype this_obj)
       (letrec
@@ -411,6 +484,7 @@ if operator is (name) -->
                 (λ (e s) (throw e currentstate))
                 current_compiletype current_obj))))
 
+; Evaluates main
 (define M-value-function-main
   (λ (expression state return-func next break continue throw compiletype this_obj)
          (M-state (closure-body (get-val (operand expression) state))
@@ -427,178 +501,76 @@ if operator is (name) -->
                   (λ (e s) (throw e state))
                   compiletype this_obj)))
 
-; Get the variables defined in a class body
-; TESTING
-(define parse-class-var-exprs
-  (λ (body)
-    (if (null? body)
-        body
-        (match (car body)
-          ((list 'var name) (cons (car body) (parse-class-var-exprs (cdr body))))
-          ((list 'var name expr) (cons (car body) (parse-class-var-exprs (cdr body))))
-          (_ (parse-class-var-exprs (cdr body)))))))
-
-(define parse-class-var-names
-  (λ (body)
-    (if (null? body)
-        body
-        (match (car body)
-          ((list 'var name) (cons name (parse-class-var-names (cdr body))))
-          ((list 'var name expr) (cons name (parse-class-var-names (cdr body))))
-          (_ (parse-class-var-names (cdr body)))))))
-
-
-; Get the functions defined in a class body
-; TESTING
-(define parse-class-func-names
-  (λ (body)
-    (if (null? body)
-        body
-        (match (car body)
-          ((list 'function name param funcbody) (cons name (parse-class-func-names (cdr body))))
-          ((list 'static-function name param funcbody) (cons name (parse-class-func-names (cdr body))))
-          (_ (parse-class-func-names (cdr body)))))))
-
-(define parse-class-func-closures
-  (λ (body classname)
-    (if (null? body)
-        body
-        (match (car body)
-          ((list 'function name param funcbody) (cons (box (create-closure name (cons 'this param) funcbody (createnewstate) classname #f)) (parse-class-func-closures (cdr body) classname)))
-          ((list 'static-function name param funcbody) (cons (box (create-closure name param funcbody (createnewstate) classname #t)) (parse-class-func-closures (cdr body) classname)))
-          (_ (parse-class-func-closures (cdr body) classname))))))
-
-
-; helper function: parse class property by inserting a function that takes a class body and a state
-; returns a LAYER i.e ((var_names .... ) (parser_result....)) 
-(define parse-class-property
-  (λ (body parser-func) (parser-func body (createnewstate))))
-             
-
 #|
-M-STATE HELPER FUNCTIONS
+MODULAR HELPERS
 |#
 
+(define class-body
+  (λ (expression) (cadddr expression)))
 
-; Creates a new binding in the state with the given variable name and the given value; corresponds to a simultaneous declaration and assignment
-(define add
-  (λ (x v state)
-    (cond
-      ((member? x (vars (firstlayer state))) (error 'bad-declaration))
-      (else (cons (add-to-layer x v (firstlayer state)) (restlayers state))))))
+(define class-closure-body
+  (λ (expression) (cadr expression)))
 
-; Creates a variable binding in a particular layer of the state
-(define add-to-layer
-  (λ (x v layer)
-    (cond
-      ((member? x (vars layer)) (error 'variable-exists))
-      (else (cons (cons x (vars layer)) (cons (cons (box v) (vals layer)) '()))))))
+(define class-closure-func-names cadddr)
 
-; Updates the binding of a declared variable in the state with the given value
-(define assign
-  (λ (x v state) (begin (set-box! (get-box x state) v) state)))
+(define class-closure-var-names cadr)
 
-; Creates a new binding in the state with the given variable name and the value '()
-(define declare
-  (λ (x state) (add x '() state)))
+(define class-closure-var-exprs caddr)
+
+(define class-closure-func-closures 
+  (lambda (closure) (list-ref closure 4)))
+
+; this is why i like to clean code
+(define class-name
+  (λ (expression) (cadr expression)))
+
+(define classname (λ (expression) (cadr expression)))
+
+(define instance-type
+  (lambda (closure) (car closure)))
+
+(define newruntimetype cadr)
+
+; parse class property by inserting a function that takes a class body and a state, returns a layer
+(define parse-class-property
+  (λ (body parser-func) (parser-func body (createnewstate))))
+
+(define super-class
+  (λ (expression)
+    (if (null? (caddr expression))
+        '()
+        (operand (caddr expression)))))
+
+#|
+FUNCTIONAL HELPERS
+|#
+
+; Gets the actual params of a function call
+(define actualparams
+  (λ (expression) (cddr expression)))
+
+; Gets the function body
+(define closure-body
+  (λ (closure) (cadr closure)))
+
+; Gets the λ-classlookup out of the closure
+(define closure-class-lookup-function
+  (λ (closure) (cadddr closure)))
+
+; Gets the function params out of the closure
+(define closure-params
+  (λ (closure) (car closure)))
+
+; Gets the λ out of the closure
+(define closure-state-function
+  (λ (closure) (caddr closure)))
 
 ; Function closure 3-tuple (params, body, λ(state) -> state)
 (define create-closure
   (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) cls) is_static)))
 
-; contain the instance's class (i.e. the run-time type or the true type) 
-; and a list of instance field VALUES.
-(define create-instance-closure
-  ; (list rt-type (firstlayer (M-state (caddr (get-val rt-type state)) (addlayer state) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)))))))
-  (λ (rt-type state) 
-    (letrec
-      [(classclosure (get-val rt-type state))
-      (funcnames (class-closure-func-names classclosure))
-      (funcclosures (class-closure-func-closures classclosure))
-      (varexprs (class-closure-var-exprs classclosure))
-      (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
-      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
-      (list rt-type (vals (firstlayer definedvarstate)) 'instance-closure))))
-    
-    
-; (expression state next)
-  ; find class closure
-  ; call m-state-init on it
-  ; class-closure super name body ((x y z) ()) (main
-  ; for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
-#|
-M-state-init: Parses classes, and classes only
-M-state-class:
-     if declare: add (var name, expr) to state
-     if ...: add (name, expr) to state
-M-state-instance (expression correpondng to fields and methods in class-closure) : Need to generate fields with interpreted value ((x, y z) (#&4, ....))
-  for var, expr in var_fields: next_state = M-state-init expr state; state=next_state
-|#
-                                                                  
-  
-; define class closures
-; the parent/super class, 
-; the list of instance field names and the expressions that compute their initial values (if any), 
-; the list of methods/function names and closures, 
-; and (optionally) a list of class field names/values and a list of constructors
-(define create-class-closure
-  (λ (super-class body classname) (list super-class 
-                              (parse-class-var-names body)
-                              (parse-class-var-exprs body)
-                              (parse-class-func-names body)
-                              (parse-class-func-closures body classname))))
+; Gets the body of a function
+(define funcbody (λ (expression) (cadddr expression)))
 
-; (define get-class-bindings
-;   (λ (body) (M-class-init body (createnewstate) (λ (v) v))))
-
-; Returns the portion of the state that contains x
-(define cut-until-layer
-  (λ (x state)
-    (if (has-var-layer x (firstlayer state))
-        state
-        (cut-until-layer x (restlayers state)))))
-
-; Checks whether or not a binding is present in a specified layer
-(define has-var-layer
-  (λ (x layer)
-    (cond
-      ((layernull? layer) #f)
-      ((eq? (firstvar layer) x) #t)
-      (else (has-var-layer x (restpairs layer))))))
-
-; Entry point into remove-cps
-(define remove-layer
-  (λ (x state) (remove-layer-cps x state (λ (v) v))))
-
-; Removes a binding from the state if it exists, in continuation passing style
-(define remove-layer-cps
-  (λ (x state return)
-    (cond
-      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
-      ((eq? x (firstvar state)) (return (restpairs state)))
-      (else (remove-layer-cps x (restpairs state)
-            (λ (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
-
-; Entry point into update-cps
-(define update
-  (λ (x v state) (update-cps x v state (λ (q) q))))
-
-; Updates the binding of the given variable in the state
-(define update-cps
-  (λ (x v state return)
-    (cond
-      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
-      ((eq? x (firstvar state))
-       (begin
-         (set-box! (firstbox state) v)
-         (return state)
-       ))
-      (else (update-cps x v (restpairs state)
-            (λ (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
-
-; Updates the binding of a declared variable in a single layer of the state
-(define update-layer
- (λ (x v layer)
-   (if (eq? x (firstvar layer))
-       (set-box! (firstval layer) v)
-       (update-layer x v (restpairs layer)))))
+; Gets the name of a function
+(define funcname (λ (expression) (cadr expression)))

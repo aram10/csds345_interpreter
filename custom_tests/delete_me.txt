@@ -1,24 +1,10 @@
 class A {
-  var x = 5;
-  var y = 10;
-
-  function main() {
-    var a = new A();
-    this.ass();
-    return a.x + a.y;
-  }
-
-  static function ass() {
+  function f() {
     return 5;
   }
 
-}
-
-class B {
-
-  function ass2() {
-     A.ass();
-     A.main();
-}
-
+  static function main() {
+    var a = new A();
+    return a.f();
+  }
 }

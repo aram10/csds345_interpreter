@@ -1,268 +1,8 @@
 #lang racket
 
 (require racket/match)
+;(require errortrace)
 (provide (all-defined-out))
-
-; λ: 'Ctrl + \'
-
-;(class A () ((var x 1) (var y 2) (function m () ((return (funcall (dot this m2))))) (function m2 () ((return (+ x y)))))
-;(class B (extends A) ((var y 22) (var z 3) (function m () ((return (funcall (dot super m))))) (function m2 () ((return (+ (+ x y) z))))))
-
-
- 
-    
-(define instance-type
-  (lambda (closure) (car closure)))
-
-(define instance-closure?
-  (lambda (expr) (and (eq? (length expr) 3) (eq? (caddr expr) 'instance-closure))))
-
-(define super-class
-  (λ (expression)
-    (if (null? (caddr expression))
-        '()
-        (operand (caddr expression)))))
-
-(define class-name
-  (λ (expression) (cadr expression)))
-
-(define class-body
-  (λ (expression) (cadddr expression)))
-
-(define class-closure-body
-  (λ (expression) (cadr expression)))
-
-(define class-closure-var-names cadr)
-(define class-closure-var-exprs caddr)
-(define class-closure-func-names cadddr)
-(define class-closure-func-closures 
-  (lambda (closure) (list-ref closure 4)))
-
-
-
-#|
-FUNCTION ANATOMY HELPERS
-|#
-
-; Gets the actual params of a function call
-(define actualparams
-  (λ (expression) (cddr expression)))
-
-; Gets the function body
-(define closure-body
-  (λ (closure) (cadr closure)))
-
-; Gets the function params out of the closure
-(define closure-params
-  (λ (closure) (car closure)))
-
-; Gets the λ out of the closure
-(define closure-state-function
-  (λ (closure) (caddr closure)))
-
-; Gets the λ-classlookup out of the closure
-(define closure-class-lookup-function
-  (λ (closure) (cadddr closure)))
-
-; Checks whether a statement is a function
-(define function?
-  (λ (expression)
-    (eq? 'function (operator expression))))
-
-; Checks whether a statement is a function
-(define static-function?
-  (λ (expression)
-    (eq? 'static-function (operator expression))))
-
-(define static-function-closure?
-  (λ (closure) (list-ref closure 4)))
-
-
-#|
-STATEMENT ANATOMY HELPERS
-|#
-
-; Gets the variable from an assignment statement
-(define assignvar (λ (expression) (cadr expression)))
-
-; Gets the expression to be assigned from an assignment statement
-(define assignexp (λ (expression) (caddr expression)))
-
-; Gets the body of an if statement/while loop
-(define body caddr)
-
-; Rrtrieves the condition of an if statement or a while loop
-(define condition cadr)
-
-; Gets the 'else' portion of an if statement
-(define else-case 
-  (λ (expr)
-    (if (= 4 (length expr))
-      (cadddr expr)
-      '())))
-
-; Gets first statement from a block of code
-(define firststatement (λ (expression) (car expression)))
-
-; Gets the body of a function
-(define funcbody (λ (expression) (cadddr expression)))
-
-; Gets the name of a function
-(define funcname (λ (expression) (cadr expression)))
-
-; Gets the name of a class
-(define classname (λ (expression) (cadr expression)))
-
-; Get the keyword of an expression
-(define keyword (λ (expression) (car expression)))
-
-; Gets the left operand of a binary expression 
-(define leftoperand cadr)
-
-; Gets the operand of a unary expression
-(define operand (λ (expression) (cadr expression)))
-
-; Gets the operator from any kind of expression
-(define operator (λ (expression) (car expression)))
-
-; Gets the parameters of a function signature
-(define params (λ (expression) (caddr expression)))
-
-; Gets every statement but the first from a block of code
-(define reststatement (λ (expression) (cdr expression)))
-
-; Gets the right operand of a binary expression
-(define rightoperand caddr)
-
-; Gets actual statements from a 'begin' expression
-(define statements (λ (expression) (cdr expression)))
-
-; Retrives the try block of a try-catch-finally
-(define tryblock (λ (expression) (cadr expression)))
-
-; Gets the entire 'catch' portion of try-catch-finally
-(define caddy (λ (expression) (caddr expression)))
-
-; Gets the catch block of try-catch-finally
-(define catchblock (λ (expression) (caddr(caddy expression))))
-
-; Gets the variable passed into the catch block
-(define catchvar (λ (expression) (car (cadr (caddy expression)))))
-
-; Gets the entire 'finally' portion of try-catch-finally
-(define finny (λ (expression) (cdddr expression)))
-
-; Gets the finally block of try-catch-finally
-(define finallyblock
-  (λ (expression)
-    (if (hasfinally? expression)
-        (cadr (car (finny expression)))
-        '())))
-
-; Gets the expression thrown in a 'throw' statement
-(define throwvalue (λ (expression) (operand expression)))
-
-(define newruntimetype cadr)
-
-#|
-EXPRESSION TYPE HELPERS
-|#
-
-; Determines whether an expression is arithmetic
-(define arithmetic?
-  (λ (expr)
-    (cond
-      ((number? expr) #t)
-      ((member? (operator expr) '(+ - * / %)) #t)
-      (else #f))))
-
-; Determines whether an expression is an assignment
-(define assign?
-  (λ (expr) (eq? (operator expr) '=)))
-
-; Determines whether an expression is a block of code
-(define block?
-  (λ (expr) (eq? (operator expr) 'begin)))
-
-; Determines whether an expression is a boolean algebra expression
-(define boolalg?
-  (λ (expr)
-    (cond
-      ((or (eq? expr 'true) (eq? expr 'false)) #t)
-      ((member? (operator expr) '(&& || !)) #t)
-      (else #f))))
-
-; Determines whether an expression is a goto for breaking out of a while loop
-(define break?
-  (λ (expr) (eq? (operator expr) 'break)))
-
-(define class?
-  (λ (expr) (eq? (keyword expr) 'class)))
-
-; Determines whether an expression is a goto for continuing the while loop
-(define continue?
-  (λ (expr) (eq? (operator expr) 'continue)))
-
-; Determines whether an expression is a comparison
-(define comparison?
-  (λ (expr)
-    (if (member? (operator expr) '(== != >= > <= <))
-        #t
-        #f)))
-
-; Determines whether an expression is a declaration
-(define declare?
-  (λ (expr) (eq? (operator expr) 'var)))
-
-(define dot?
-  (λ (expr) (eq? (operator expr) 'dot)))
-
-; Determines whether an expression is a function call
-(define funcall?
-  (λ (expression) (eq? (operator expression) 'funcall)))
-
-; Determined whether a try-catch-finally has a 'finally' expression
-(define hasfinally?
-  (λ (expr) (not (null? (car (finny expr))))))
-    
-; Determines whether an expression is an if statement
-(define if?
-  (λ (expr) (eq? (operator expr) 'if)))
-
-; Determines if an expression is constructing an object with 'new'
-(define new?
-  (λ (expr) (eq? (operator expr) 'new)))
-
-; Determines whether an expression is a return statement
-(define return?
-  (λ (expr) (eq? (operator expr) 'return)))
-
-; Determines whether an expression is any kind of statement
-(define statement?
-  (λ (expr) (list? (operator expr))))
-
-; Determines whether an expression is a try-catch-finally
-(define trycatch?
-  (λ (expr) (eq? (operator expr) 'try)))
-
-; Determines whether an expression is a throw statement
-(define throw?
-  (λ (expr) (eq? (operator expr) 'throw)))
-
-; Checks if the given construct is a variable name
-(define variable?
-  (λ (x)
-    (and (not (or (isbool? x) (number? x))) (atom? x))))
-
-; Determines whether an expression is a while loop
-(define while?
-  (λ (expr) (eq? (operator expr) 'while)))
-
-
-
-#|
-STATE INTERFACING HELPER FUNCTIONS
-|#
 
 ; Adds a layer to the front of the state
 (define addlayer (λ (state) (cons (createnewlayer) state)))
@@ -280,11 +20,79 @@ STATE INTERFACING HELPER FUNCTIONS
   (λ (x layer)
     (and (declared-layer? x layer) (not (null? (get-val-layer x layer))))))
 
+; Creates a new binding in the state with the given variable name and the given value; corresponds to a simultaneous declaration and assignment
+(define add
+  (λ (x v state)
+    (cond
+      ((member? x (vars (firstlayer state))) (error 'bad-declaration))
+      (else (cons (add-to-layer x v (firstlayer state)) (restlayers state))))))
+
+; Creates a variable binding in a particular layer of the state
+(define add-to-layer
+  (λ (x v layer)
+    (cond
+      ((member? x (vars layer)) (error 'variable-exists))
+      (else (cons (cons x (vars layer)) (cons (cons (box v) (vals layer)) '()))))))
+
+; Updates the binding of a declared variable in the state with the given value
+(define assign
+  (λ (x v state) (begin (set-box! (get-box x state) v) state)))
+
+; Gets the expression to be assigned from an assignment statement
+(define assignexp (λ (expression) (caddr expression)))
+
+; Gets the variable from an assignment statement
+(define assignvar (λ (expression) (cadr expression)))
+
+; Gets the body of an if statement/while loop
+(define body caddr)
+
+; Helper function for evaluating boolean expressions while making appropriate transformations with booltoname and nametobool
+(define boolstringop
+  (λ (x y f)
+    (booltoname (f (nametobool x) (nametobool y)))))
+
+; Same as boolstringop, but for unary operations
+(define boolstringsingle
+  (λ (x f)
+    (booltoname (f (nametobool x)))))
+
+; Converts booleans to the associated tokens 'true or 'false
+(define booltoname
+  (λ (a)
+    (cond
+      ((eq? a #t) 'true)
+      ((eq? a #f) 'false)
+      (else (error 'not-a-bool)))))
+
 ; Abstraction of a layer of the state
 (define createnewlayer (λ () '(()())))
 
 ; Abstraction of the entire state
 (define createnewstate (λ () '((()()))))
+
+; Gets the entire 'catch' portion of try-catch-finally
+(define caddy (λ (expression) (caddr expression)))
+
+; Gets the catch block of try-catch-finally
+(define catchblock (λ (expression) (caddr(caddy expression))))
+
+; Gets the variable passed into the catch block
+(define catchvar (λ (expression) (car (cadr (caddy expression)))))
+
+; Rrtrieves the condition of an if statement or a while loop
+(define condition cadr)
+
+; Returns the portion of the state that contains x
+(define cut-until-layer
+  (λ (x state)
+    (if (has-var-layer x (firstlayer state))
+        state
+        (cut-until-layer x (restlayers state)))))
+
+; Creates a new binding in the state with the given variable name and the value '()
+(define declare
+  (λ (x state) (add x '() state)))
 
 ; Checks if a given variable has been declared
 (define declared?
@@ -302,6 +110,26 @@ STATE INTERFACING HELPER FUNCTIONS
       ((not (atom? x)) #f)
       ((eq? (firstvar layer) x) #t)
       (else (declared-layer? x (restpairs layer))))))
+                                                                
+; Gets the 'else' portion of an if statement
+(define else-case 
+  (λ (expr)
+    (if (= 4 (length expr))
+      (cadddr expr)
+      '())))
+
+; Gets the finally block of try-catch-finally
+(define finallyblock
+  (λ (expression)
+    (if (hasfinally? expression)
+        (cadr (car (finny expression)))
+        '())))
+
+; Gets the entire 'finally' portion of try-catch-finally
+(define finny (λ (expression) (cdddr expression)))
+
+; Gets first statement from a block of code
+(define firststatement (λ (expression) (car expression)))
 
 ; Retrives the leftmost box of a layer
 (define firstbox (λ (layer) (car (vals layer))))
@@ -350,6 +178,24 @@ STATE INTERFACING HELPER FUNCTIONS
       ((eq? (firstvar layer) x) (firstval layer))
       (else (get-val-layer x (restpairs layer))))))
 
+; Determined whether a try-catch-finally has a 'finally' expression
+(define hasfinally?
+  (λ (expr) (not (null? (car (finny expr))))))
+
+; Checks whether or not a binding is present in a specified layer
+(define has-var-layer
+  (λ (x layer)
+    (cond
+      ((layernull? layer) #f)
+      ((eq? (firstvar layer) x) #t)
+      (else (has-var-layer x (restpairs layer))))))
+
+; Get the keyword of an expression
+(define keyword (λ (expression) (car expression)))
+
+; Gets the left operand of a binary expression 
+(define leftoperand cadr)
+
 ; Gets the last layer of the state
 (define lastlayer
   (λ (state)
@@ -367,6 +213,51 @@ STATE INTERFACING HELPER FUNCTIONS
 (define layernull?
   (λ (layer)
     (or (null? layer) (null? (vars layer)) (null? (vals layer)))))
+
+; Returns true if the atom is a member of the list, and false otherwise
+(define member?
+  (λ (a l)
+    (cond
+      ((null? a) #t)
+      ((null? l) #f)
+      ((eq? a (car l)) #t)
+      (else (member? a (cdr l))))))
+
+; Converts the tokens 'true and 'false to their respective boolean equivalencies
+(define nametobool
+  (λ (a)
+    (cond
+      ((eq? a 'true) #t)
+      ((eq? a 'false) #f)
+      (else (error 'not-a-bool)))))
+
+; Gets the operand of a unary expression
+(define operand (λ (expression) (cadr expression)))
+
+; Gets the operator from any kind of expression
+(define operator (λ (expression) (car expression)))
+
+; Gets the parameters of a function signature
+(define params (λ (expression) (caddr expression)))
+
+; Entry point into remove-cps
+(define remove-layer
+  (λ (x state) (remove-layer-cps x state (λ (v) v))))
+
+; Removes a binding from the state if it exists, in continuation passing style
+(define remove-layer-cps
+  (λ (x state return)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
+      ((eq? x (firstvar state)) (return (restpairs state)))
+      (else (remove-layer-cps x (restpairs state)
+            (λ (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
+
+; Gets every statement but the first from a block of code
+(define reststatement (λ (expression) (cdr expression)))
+
+; Gets the right operand of a binary expression
+(define rightoperand caddr)
 
 ; Removes the frontmost layer from the state
 (define removelayer
@@ -389,6 +280,45 @@ STATE INTERFACING HELPER FUNCTIONS
 ; Retrieve all variables in the state except the first
 (define restvars (λ (layer) (cdr (vars layer))))
 
+(define reverse
+  (lambda (lat)
+    (cond
+      ((null? lat) '())
+      (else (append (reverse (cdr lat)) (cons (car lat) '()))))))
+
+; Gets actual statements from a 'begin' expression
+(define statements (λ (expression) (cdr expression)))
+
+; Retrives the try block of a try-catch-finally
+(define tryblock (λ (expression) (cadr expression)))
+
+; Gets the expression thrown in a 'throw' statement
+(define throwvalue (λ (expression) (operand expression)))
+
+; Entry point into update-cps
+(define update
+  (λ (x v state) (update-cps x v state (λ (q) q))))
+
+; Updates the binding of the given variable in the state
+(define update-cps
+  (λ (x v state return)
+    (cond
+      ((or (null? (vars state)) (null? (vals state))) (return (createnewstate)))
+      ((eq? x (firstvar state))
+       (begin
+         (set-box! (firstbox state) v)
+         (return state)
+       ))
+      (else (update-cps x v (restpairs state)
+            (λ (s) (return (cons (cons (firstvar state) (vars s)) (cons (cons (firstbox state) (vals s)) '())))))))))
+
+; Updates the binding of a declared variable in a single layer of the state
+(define update-layer
+ (λ (x v layer)
+   (if (eq? x (firstvar layer))
+       (set-box! (firstval layer) v)
+       (update-layer x v (restpairs layer)))))
+
 ; Gets sublist of values from the state
 (define vals (λ (layer) (cadr layer)))
 
@@ -396,65 +326,99 @@ STATE INTERFACING HELPER FUNCTIONS
 (define vars (λ (layer) (car layer)))
 
 
-
 #|
-BOOLEAN HELPER FUNCTIONS
+owo what's this
 |#
-
-; Helper function for evaluating boolean expressions while making appropriate transformations with booltoname and nametobool
-(define boolstringop
-  (λ (x y f)
-    (booltoname (f (nametobool x) (nametobool y)))))
-
-; Same as boolstringop, but for unary operations
-(define boolstringsingle
-  (λ (x f)
-    (booltoname (f (nametobool x)))))
-
-; Converts booleans to the associated tokens 'true or 'false
-(define booltoname
-  (λ (a)
+(define arithmetic?
+  (λ (expr)
     (cond
-      ((eq? a #t) 'true)
-      ((eq? a #f) 'false)
-      (else (error 'not-a-bool)))))
+      ((number? expr) #t)
+      ((member? (operator expr) '(+ - * / %)) #t)
+      (else #f))))
 
-; Checks if the given construct is an atomic boolean
-(define isbool?
+(define assign?
+  (λ (expr) (eq? (operator expr) '=)))
+
+(define atom?
+  (λ (x)
+    (not (or (pair? x) (null? x)))))
+
+(define block?
+  (λ (expr) (eq? (operator expr) 'begin)))
+
+(define bool?
   (λ (a)
     (cond
       ((or (list? a) (number? a)) #f)
       ((or (eq? a 'true) (eq? a 'false)) #t)
       (else #f))))
 
-; Converts the tokens 'true and 'false to their respective boolean equivalencies
-(define nametobool
-  (λ (a)
+(define boolalg?
+  (λ (expr)
     (cond
-      ((eq? a 'true) #t)
-      ((eq? a 'false) #f)
-      (else (error 'not-a-bool)))))
+      ((or (eq? expr 'true) (eq? expr 'false)) #t)
+      ((member? (operator expr) '(&& || !)) #t)
+      (else #f))))
 
-(define reverse
-  (lambda (lat)
-    (cond
-      ((null? lat) '())
-      (else (append (reverse (cdr lat)) (cons (car lat) '()))))))
+(define break?
+  (λ (expr) (eq? (operator expr) 'break)))
 
-#|
-GENERIC HELPER FUNCTIONS
-|#
+(define class?
+  (λ (expr) (eq? (keyword expr) 'class)))
 
-; Returns true if the construct is an atom, and false otherwise
-(define atom?
+(define continue?
+  (λ (expr) (eq? (operator expr) 'continue)))
+
+(define comparison?
+  (λ (expr)
+    (if (member? (operator expr) '(== != >= > <= <))
+        #t
+        #f)))
+
+(define declare?
+  (λ (expr) (eq? (operator expr) 'var)))
+
+(define dot?
+  (λ (expr) (eq? (operator expr) 'dot)))
+
+(define funcall?
+  (λ (expression) (eq? (operator expression) 'funcall)))
+
+(define function?
+  (λ (expression)
+    (eq? 'function (operator expression))))
+
+(define if?
+  (λ (expr) (eq? (operator expr) 'if)))
+
+(define instance-closure?
+  (lambda (expr) (and (eq? (length expr) 3) (eq? (caddr expr) 'instance-closure))))
+
+(define new?
+  (λ (expr) (eq? (operator expr) 'new)))
+
+(define return?
+  (λ (expr) (eq? (operator expr) 'return)))
+
+(define statement?
+  (λ (expr) (list? (operator expr))))
+
+(define static-function?
+  (λ (expression)
+    (eq? 'static-function (operator expression))))
+
+(define static-function-closure?
+  (λ (closure) (list-ref closure 4)))
+
+(define throw?
+  (λ (expr) (eq? (operator expr) 'throw)))
+
+(define trycatch?
+  (λ (expr) (eq? (operator expr) 'try)))
+
+(define variable?
   (λ (x)
-    (not (or (pair? x) (null? x)))))
+    (and (not (or (bool? x) (number? x))) (atom? x))))
 
-; Returns true if the atom is a member of the list, and false otherwise
-(define member?
-  (λ (a l)
-    (cond
-      ((null? a) #t)
-      ((null? l) #f)
-      ((eq? a (car l)) #t)
-      (else (member? a (cdr l))))))
+(define while?
+  (λ (expr) (eq? (operator expr) 'while)))
