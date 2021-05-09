@@ -317,16 +317,34 @@ FUNCTION STUFF
                         (cons 'this (params expression))))]
       (add (funcname expression) (create-closure (funcname expression) funcparams (funcbody expression) state compiletype is_static) state))))
 
+(define dot-closure
+  (lambda (expr state return-func next break continue throw compiletype this_obj)
+    (match expr
+      ; assume obj instance
+      ; in later impl, if sees class, do different handling by looking up in the state
+      ((list 'dot objexpr _) (M-value objexpr state return-func next break continue throw compiletype this_obj))
+      (_ this_obj))))
+
+(define dot-member-name
+  (lambda (expr)
+    (match expr
+      ; a.x, a.f(), new A().something
+      ((list 'dot objexpr mem) mem)
+      (_ expr))))
+
 ; Function evaluator, when the function stands alone
 (define M-state-funcall
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (letrec
         [
-          (classclosure (get-val (instance-type this_obj) state))
-          (funcclosure (get-val-layer (operand expression)
+          ; funcall (dot exppr funcname) params | funcall funcname params
+          (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
+          (classclosure (get-val (instance-type current_obj) state))
+          (funcclosure (get-val-layer (dot-member-name expression)
                                       (list (class-closure-func-names classclosure) 
                                             (class-closure-func-closures classclosure))))
           (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
+          (current_compiletype (class-name (closure-class-lookup-function funcclosure)))
         ]
         (M-state (closure-body funcclosure)
                 (create-bindings
@@ -334,13 +352,13 @@ FUNCTION STUFF
                       actual-params
                       state
                       (addlayer ((closure-state-function funcclosure) state))
-                      return-func next break continue throw)
+                      return-func next break continue throw current_compiletype current_obj)
                 (λ (val s) (next state))
                 (λ (s) (next state))
                 (λ (v) (error 'not-a-loop))
                 (λ (v) (error 'not-a-loop))
                 (λ (e s) (throw e state))
-                compiletype this_obj))))
+                current_compiletype current_obj))))
 
 #|
 M-state-funcall:
@@ -364,11 +382,14 @@ if operator is (name) -->
   (λ (expression state return-func next break continue throw compiletype this_obj)
       (letrec
         [
-          (classclosure (get-val (instance-type this_obj) state))
-          (funcclosure (get-val-layer (operand expression) 
+          ; funcall (dot exppr funcname) params | funcall funcname params
+          (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
+          (classclosure (get-val (instance-type current_obj) state))
+          (funcclosure (get-val-layer (dot-member-name expression)
                                       (list (class-closure-func-names classclosure) 
                                             (class-closure-func-closures classclosure))))
           (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
+          (current_compiletype (class-name (closure-class-lookup-function funcclosure)))
         ]
         (M-state (closure-body funcclosure)
                 (create-bindings
@@ -376,13 +397,13 @@ if operator is (name) -->
                       actual-params
                       state
                       (addlayer ((closure-state-function funcclosure) state))
-                      return-func next break continue throw compiletype this_obj)
+                      return-func next break continue throw current_compiletype current_obj)
                 (λ (val s) val)
                 (λ (s) (next state))
                 (λ (v) (error 'not-a-loop))
                 (λ (v) (error 'not-a-loop))
                 (λ (e s) (throw e state))
-                compiletype this_obj))))
+                current_compiletype current_obj))))
 
 ; Get the variables defined in a class body
 ; TESTING
@@ -461,7 +482,7 @@ M-STATE HELPER FUNCTIONS
 
 ; Function closure 3-tuple (params, body, λ(state) -> state)
 (define create-closure
-  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) (get-val cls state)) is_static)))
+  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) (get-val cls s)) is_static)))
 
 ; contain the instance's class (i.e. the run-time type or the true type) 
 ; and a list of instance field VALUES.

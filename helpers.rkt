@@ -12,8 +12,7 @@
  
     
 (define instance-type
-  (lambda (closure) (car closure)))
- 
+  (lambda (closure) (car closure))) 
 
 (define super-class
   (λ (expression)
@@ -57,6 +56,10 @@ FUNCTION ANATOMY HELPERS
 ; Gets the λ out of the closure
 (define closure-state-function
   (λ (closure) (caddr closure)))
+
+; Gets the λ-classlookup out of the closure
+(define closure-class-lookup-function
+  (λ (closure) (cadddr closure)))
 
 ; Checks whether a statement is a function
 (define function?
