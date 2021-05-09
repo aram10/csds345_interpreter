@@ -2,7 +2,7 @@
 
 (provide (all-defined-out))
 (require racket/match)
-(require errortrace)
+;(require errortrace)
 (require "classParser.rkt" "helpers.rkt")
 
 #|
@@ -37,7 +37,7 @@ Receives a list of statements in prefix notation from the parser, and passes the
          (funcclosures (class-closure-func-closures mainclassclosure))
          (mainfuncclosure (get-val-layer 'main (list funcnames funcclosures)))
          (globalstatemain (add 'main mainfuncclosure (addlayer globalstate)))]
-      (M-value-function '(funcall main) globalstatemain (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) classname '()))))
+      (M-value-function-main '(funcall main) globalstatemain (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) classname '()))))
 
 #|
 M-VALUE EXPRESSIONS
@@ -114,7 +114,8 @@ M-VALUE EXPRESSIONS
       ((comparison? expression) (M-compare expression state return-func next break continue throw compiletype this_obj))
       ((funcall? expression) (M-value-function expression state return-func next break continue throw compiletype this_obj))
       ((new? expression) (create-instance-closure (newruntimetype expression) state))
-      (else (error 'bad-argument)))))
+      ((instance-closure? expression) expression)
+      (else (begin (println expression) (error 'bad-argument))))))
 
 #|
 M-STATE EXPRESSIONS
@@ -333,10 +334,12 @@ FUNCTION STUFF
       (_ expr))))
 
 ; Function evaluator, when the function stands alone
+; MAKE THIS USE THE SAME LETREC AS M_STATE_FUNCTION
 (define M-state-funcall
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (letrec
         [
+          (debug (begin (println state) '()))
           ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
@@ -382,28 +385,47 @@ if operator is (name) -->
   (λ (expression state return-func next break continue throw compiletype this_obj)
       (letrec
         [
+          ;(debug (begin (println state) (println expression) '()))
           ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
-          (funcclosure (get-val-layer (dot-member-name expression)
+          (funcclosure (get-val-layer (dot-member-name (operand expression))
                                       (list (class-closure-func-names classclosure) 
                                             (class-closure-func-closures classclosure))))
-          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons this_obj (actualparams expression))))
-          (current_compiletype (class-name (closure-class-lookup-function funcclosure)))
-        ]
+          (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons current_obj (actualparams expression))))
+          (current_compiletype ((closure-class-lookup-function funcclosure) state))
+          (currentstate (add (dot-member-name (operand expression)) funcclosure (addlayer state)))
+          ;(debug (begin (println state) (println ((closure-class-lookup-function funcclosure) state)) '()))
+          ]
         (M-state (closure-body funcclosure)
                 (create-bindings
                       (closure-params funcclosure)
                       actual-params
-                      state
-                      (addlayer ((closure-state-function funcclosure) state))
+                      currentstate
+                      (addlayer ((closure-state-function funcclosure) currentstate))
                       return-func next break continue throw current_compiletype current_obj)
                 (λ (val s) val)
-                (λ (s) (next state))
+                (λ (s) (next currentstate))
                 (λ (v) (error 'not-a-loop))
                 (λ (v) (error 'not-a-loop))
-                (λ (e s) (throw e state))
+                (λ (e s) (throw e currentstate))
                 current_compiletype current_obj))))
+
+(define M-value-function-main
+  (λ (expression state return-func next break continue throw compiletype this_obj)
+         (M-state (closure-body (get-val (operand expression) state))
+                  (create-bindings
+                        (closure-params (get-val (operand expression) state))
+                        (actualparams expression)
+                        state
+                        (addlayer ((closure-state-function (get-val (operand expression) state)) state))
+                        return-func next break continue throw compiletype this_obj)
+                  (λ (val s) val)
+                  (λ (s) (next state))
+                  (λ (v) (error 'not-a-loop))
+                  (λ (v) (error 'not-a-loop))
+                  (λ (e s) (throw e state))
+                  compiletype this_obj)))
 
 ; Get the variables defined in a class body
 ; TESTING
@@ -482,7 +504,7 @@ M-STATE HELPER FUNCTIONS
 
 ; Function closure 3-tuple (params, body, λ(state) -> state)
 (define create-closure
-  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) (get-val cls s)) is_static)))
+  (λ (name params body state cls is_static) (list params body (λ (v) (cut-until-layer name v)) (lambda (s) cls) is_static)))
 
 ; contain the instance's class (i.e. the run-time type or the true type) 
 ; and a list of instance field VALUES.
@@ -496,7 +518,7 @@ M-STATE HELPER FUNCTIONS
       (varexprs (class-closure-var-exprs classclosure))
       (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
       (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
-      (list rt-type (vals (firstlayer definedvarstate))))))
+      (list rt-type (vals (firstlayer definedvarstate)) 'instance-closure))))
     
     
 ; (expression state next)

@@ -12,7 +12,10 @@
  
     
 (define instance-type
-  (lambda (closure) (car closure))) 
+  (lambda (closure) (car closure)))
+
+(define instance-closure?
+  (lambda (expr) (and (eq? (length expr) 3) (eq? (caddr expr) 'instance-closure))))
 
 (define super-class
   (λ (expression)
