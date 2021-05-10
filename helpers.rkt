@@ -299,11 +299,9 @@
 (define update
   (λ (x v state) (update-cps x v state (λ (q) q))))
 
-
+; Updates instance fields, works with boxes
 (define update-instance-field
   (λ (obj fieldname new-val compiletype state)
-    ; step 1: find class closure
-    ; step 2: instance (A (box val, box val)) class: (() (name1, name2) (expr1, expr2) ....)
     (letrec
       [
          (class-closure (get-val compiletype state))
@@ -354,7 +352,7 @@
 
 
 #|
-owo what's this
+TYPES
 |#
 (define arithmetic?
   (λ (expr)
@@ -452,7 +450,6 @@ owo what's this
 
 
 
-; FUTURE ALEX: reorg this -past Alex
 
 #|
 MODULAR HELPERS

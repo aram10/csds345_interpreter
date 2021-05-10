@@ -2,7 +2,6 @@
 
 (provide (all-defined-out))
 (require racket/match)
-;(require errortrace)
 (require "classParser.rkt" "helpers.rkt")
 
 #|
@@ -15,18 +14,29 @@ Alexander Rambasek
 5/9/2021
 |#
 
+#|
+
+COMMENTS
+
+We were having a lot of issue getting 'super' to work with functions. It doesn't get the correct compile-time type.
+However, it does work with variables.
+
+We are able to successfully pass the first 6 tests. The vast majority of the remaining tests were giving the same error
+relating to our implementation of super, and it is likely that had we been able to resolve this, they would have fallen
+into place.
+
+We did use 'letrec' more than we would have liked. However, this was in an attempt to make the code easier to read and
+build upon; all of this could have easily been translated into a strictly functional style but we made the judgement
+call not to.
+
+|#
+
 
 #|
 INTERPRETER
 
 Receives a list of statements in prefix notation from the parser, and passes them to M-state
 |#
-
-
-(define interpret2
-  (λ (filename)
-    (M-state-init (parser filename) (createnewstate) (λ (v) v))))
-
 
 (define interpret
   (λ (filename classname)
@@ -119,7 +129,7 @@ M-VALUE EXPRESSIONS
       ((dot? expression) (get-instance-field
                                   (dot-closure expression state return-func next break continue throw compiletype this_obj)
                                   (dot-member-name expression) (get-compile-type-dot expression compiletype state) state))
-      (else (begin (println expression) (error 'bad-argument))))))
+      (else (error 'bad-argument)))))
 
 (define get-compile-type-dot
   (lambda (dotexpr compiletype state)
@@ -178,18 +188,18 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define M-state-assign
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
-      ((not (assign? expression)) (error 'not-an-assignment))
-      ((dot? (assignvar expression)) (update-instance-field
-                                  (dot-closure (assignvar expression) state return-func next break continue throw compiletype this_obj)
-                                  (dot-member-name (assignvar expression))
-                                  (M-value (assignexp expression) state return-func next break continue throw compiletype this_obj)
-                                  compiletype state)) 
+      ((not (assign? expression)) (error 'not-an-assignment)) 
       ((not (declared? (assignvar expression) state)) (error 'variable-not-declared))
       ((declared? (assignexp expression) state) (assign (assignvar expression) (get-val (assignexp expression) state) state))
       ((and (variable? (assignexp expression)) (not (declared? (assignexp expression) state))) (error 'assigning-variable-not-declared))
       ((arithmetic? (assignexp expression)) (assign (assignvar expression) (M-integer (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
       ((boolalg? (assignexp expression)) (assign (assignvar expression) (M-boolean (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
       ((funcall? (assignexp expression)) (assign (assignvar expression) (M-value-function (assignexp expression) state return-func next break continue throw compiletype this_obj) state))
+      ((dot? (assignvar expression)) (update-instance-field
+                                  (dot-closure (assignvar expression) state return-func next break continue throw compiletype this_obj)
+                                  (dot-member-name (assignvar expression))
+                                  (M-value (assignexp expression) state return-func next break continue throw compiletype this_obj)
+                                  compiletype state))
       (else (error 'bad-assignment)))))
 
 ; Evaluates the result of executing a block of code
@@ -263,16 +273,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 (define class-declaration
   (λ (expression state)
     (match expression
-      ;((not (declare? expression)) (error 'not-a-declaration))
       ((list 'var name) (declare (operand expression) state))
       ((list 'var name expr) (add (leftoperand expression) (rightoperand expression) state))
       (_ (error 'bad-declaration)))))
 
 ; define class closures
-; the parent/super class, 
-; the list of instance field names and the expressions that compute their initial values (if any), 
-; the list of methods/function names and closures, 
-; and (optionally) a list of class field names/values and a list of constructors
 (define create-class-closure
   (λ (super-class body classname) (list super-class 
                               (parse-class-var-names body '())
@@ -292,12 +297,11 @@ necessary updates to the state, and evaluates to the special variable 'return, o
              (funcnames (class-closure-func-names classclosure))
              (funcclosures (class-closure-func-closures classclosure))
              (varexprs (class-closure-var-exprs classclosure))
-             (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
+             (statewithfunc (cons (list funcnames funcclosures) state)) 
              (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
           (list rt-type (reverse (append (vals (firstlayer definedvarstate)) (reverse (instance-values (create-instance-closure superclass state))))) 'instance-closure)))))
 
 ; Gets instance of LHS of dot expression
-; Currently DOES NOT work with static references to classes
 (define dot-closure
   (lambda (expr state return-func next break continue throw compiletype this_obj)
     (match expr
@@ -329,7 +333,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
           (_ (parse-class-func-closures (cdr body) classname))))))
 
 ; Get the functions defined in a class body
-; TESTING
 (define parse-class-func-names
   (λ (body)
     (if (null? body)
@@ -340,7 +343,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
           (_ (parse-class-func-names (cdr body)))))))
 
 ; Get the variable expressions in a class body
-; TESTING
 (define parse-class-var-exprs
   (λ (body)
     (if (null? body)
@@ -353,7 +355,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
           (_ (parse-class-var-exprs (cdr body)))))))
 
 ; Get the variable names in a class body
-; TESTING
 (define parse-class-var-names
   (λ (body acc)
     (if (null? body)
@@ -384,13 +385,10 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       (else (error 'mismatch-params)))))
 
 ; Function evaluator, when the function stands alone
-; MAKE THIS USE THE SAME LETREC AS M_STATE_FUNCTION
 (define M-state-funcall
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (letrec
         [
-          (debug (begin (println state) (println expression)'()))
-          ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
           (funcclosure (get-instance-field current_obj (dot-member-name (operand expression)) (get-compile-type-dot (operand expression) compiletype state) state))
@@ -421,20 +419,17 @@ necessary updates to the state, and evaluates to the special variable 'return, o
                         (cons 'this (params expression))))]
       (add (funcname expression) (create-closure (funcname expression) funcparams (funcbody expression) state compiletype is_static) state))))
 
-
+; Handles functions that result in a value
 (define M-value-function
   (λ (expression state return-func next break continue throw compiletype this_obj)
       (letrec
         [
-          ;(debug (begin (println state) (println expression) '()))
-          ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
           (funcclosure (get-instance-field current_obj (dot-member-name (operand expression)) (get-compile-type-dot (operand expression) compiletype state) state))
           (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons current_obj (actualparams expression))))
           (current_compiletype ((closure-class-lookup-function funcclosure) state))
           (currentstate (add (dot-member-name (operand expression)) funcclosure (addlayer state)))
-          ;(debug (begin (println state) (println ((closure-class-lookup-function funcclosure) state)) '()))
           ]
         (M-state (closure-body funcclosure)
                 (create-bindings
