@@ -118,9 +118,15 @@ M-VALUE EXPRESSIONS
       ((instance-closure? expression) expression)
       ((dot? expression) (get-instance-field
                                   (dot-closure expression state return-func next break continue throw compiletype this_obj)
-                                  (dot-member-name expression) compiletype state))
+                                  (dot-member-name expression) (get-compile-type-dot expression compiletype state) state))
       (else (begin (println expression) (error 'bad-argument))))))
 
+(define get-compile-type-dot
+  (lambda (dotexpr compiletype state)
+    (match dotexpr
+      ((list 'dot 'this _) compiletype)
+      ((list 'dot 'super _) (get-super-class (get-val compiletype state)))
+      (_ compiletype))))
 #|
 M-STATE EXPRESSIONS
 |#
@@ -288,7 +294,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
              (varexprs (class-closure-var-exprs classclosure))
              (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
              (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
-          (list rt-type (append (reverse (vals (firstlayer definedvarstate))) (reverse (instance-values (create-instance-closure superclass state)))) 'instance-closure)))))
+          (list rt-type (reverse (append (vals (firstlayer definedvarstate)) (reverse (instance-values (create-instance-closure superclass state))))) 'instance-closure)))))
 
 ; Gets instance of LHS of dot expression
 ; Currently DOES NOT work with static references to classes
@@ -296,6 +302,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
   (lambda (expr state return-func next break continue throw compiletype this_obj)
     (match expr
       ((list 'dot 'this _) this_obj)
+      ((list 'dot 'super _) this_obj)
       ((list 'dot objexpr _) (M-value objexpr state return-func next break continue throw compiletype this_obj))
       (_ this_obj))))
 
@@ -341,6 +348,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
         (match (car body)
           ((list 'var name) (cons (car body) (parse-class-var-exprs (cdr body))))
           ((list 'var name expr) (cons (car body) (parse-class-var-exprs (cdr body))))
+          ((list 'function name param funcbody) (cons (car body) (parse-class-var-exprs (cdr body))))
+          ((list 'static-function name param funcbody) (cons (car body) (parse-class-var-exprs (cdr body))))
           (_ (parse-class-var-exprs (cdr body)))))))
 
 ; Get the variable names in a class body
@@ -352,6 +361,8 @@ necessary updates to the state, and evaluates to the special variable 'return, o
         (match (car body)
           ((list 'var name) (parse-class-var-names (cdr body) (cons name acc)))
           ((list 'var name expr) (parse-class-var-names (cdr body) (cons name acc)))
+          ((list 'function name param funcbody) (parse-class-var-names (cdr body) (cons name acc)))
+          ((list 'static-function name param funcbody) (parse-class-var-names (cdr body) (cons name acc)))
           (_ (parse-class-var-names (cdr body) acc))))))
 
 
@@ -382,9 +393,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
           ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
-          (funcclosure (get-val-layer (dot-member-name (operand expression))
-                                      (list (class-closure-func-names classclosure) 
-                                            (class-closure-func-closures classclosure))))
+          (funcclosure (get-instance-field current_obj (dot-member-name (operand expression)) (get-compile-type-dot (operand expression) compiletype state) state))
           (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons current_obj (actualparams expression))))
           (current_compiletype ((closure-class-lookup-function funcclosure) state))
           (currentstate (add (dot-member-name (operand expression)) funcclosure (addlayer state)))
@@ -421,9 +430,7 @@ necessary updates to the state, and evaluates to the special variable 'return, o
           ; funcall (dot exppr funcname) params | funcall funcname params
           (current_obj (dot-closure (operand expression) state return-func next break continue throw compiletype this_obj))
           (classclosure (get-val (instance-type current_obj) state))
-          (funcclosure (get-val-layer (dot-member-name (operand expression))
-                                      (list (class-closure-func-names classclosure) 
-                                            (class-closure-func-closures classclosure))))
+          (funcclosure (get-instance-field current_obj (dot-member-name (operand expression)) (get-compile-type-dot (operand expression) compiletype state) state))
           (actual-params (if (static-function-closure? funcclosure) (actualparams expression) (cons current_obj (actualparams expression))))
           (current_compiletype ((closure-class-lookup-function funcclosure) state))
           (currentstate (add (dot-member-name (operand expression)) funcclosure (addlayer state)))

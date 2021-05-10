@@ -476,13 +476,24 @@ MODULAR HELPERS
 ; helper to, given a class and a var name, returns the index that the var name is stored at
 (define class-field-index
   (λ (cname field state)
-    (- (length (class-closure-var-names (get-val cname state))) (class-field-index-helper (class-closure-var-names (get-val cname state)) field 1))))
+    (- (- (class-chain-length cname state) 
+        (class-field-index-helper cname (class-closure-var-names (get-val cname state)) field 0 state)) 1)))
 
 (define class-field-index-helper
-  (λ (class-vars field acc)
-    (if (eq? (car class-vars) field)
-        acc
-        (class-field-index-helper (cdr class-vars) field (+ 1 acc)))))
+  (λ (curr-class class-vars field acc state)
+    (cond 
+      [(null? class-vars) (class-field-index-helper (get-super-class (get-val curr-class state)) 
+                                                    (class-closure-var-names (get-super-class-closure curr-class state))
+                                                    field acc state)]
+      [(eq? field (car class-vars)) acc]
+      [else (class-field-index-helper curr-class (cdr class-vars) field (+ 1 acc) state)])))
+
+(define class-chain-length
+  (λ (curr-class state)
+    (if (null? (get-super-class (get-val curr-class state)))
+        (length (class-closure-var-names (get-val curr-class state)))
+        (+ (length (class-closure-var-names (get-val curr-class state))) (class-chain-length (get-super-class (get-val curr-class state)) state)))))
+      
 
 (define class-name
   (λ (expression) (cadr expression)))
@@ -490,6 +501,9 @@ MODULAR HELPERS
 ; Get super class from closure
 (define get-super-class
   (λ (closure) (car closure)))
+
+(define get-super-class-closure
+  (lambda (classname state) (get-val (get-super-class (get-val classname state)) state)))
 
 (define instance-type
   (lambda (closure) (car closure)))
