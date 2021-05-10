@@ -487,6 +487,10 @@ MODULAR HELPERS
 (define class-name
   (λ (expression) (cadr expression)))
 
+; Get super class from closure
+(define get-super-class
+  (λ (closure) (car closure)))
+
 (define instance-type
   (lambda (closure) (car closure)))
 
@@ -510,6 +514,7 @@ MODULAR HELPERS
     (if (null? (caddr expression))
         '()
         (operand (caddr expression)))))
+
 
 #|
 FUNCTIONAL HELPERS

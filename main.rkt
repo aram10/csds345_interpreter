@@ -107,10 +107,7 @@ M-VALUE EXPRESSIONS
 (define M-value
   (λ (expression state return-func next break continue throw compiletype this_obj)
     (cond
-      ; (+ x 5) -> (+ (dot this x) 5)
-      ; x
-      ; (9 1 5 2)  x
-      ((declared? expression state) (get-val expression state)); change
+      ((declared? expression state) (get-val expression state))
       ((local-var? compiletype expression state) (get-instance-field this_obj expression compiletype state))
       ((bool? expression) expression)
       ((arithmetic? expression) (M-integer expression state return-func next break continue throw compiletype this_obj))
@@ -158,7 +155,6 @@ necessary updates to the state, and evaluates to the special variable 'return, o
       ((function? expression) (next (M-state-function expression state compiletype #t)))
       ((static-function? expression) (next (M-state-function expression state compiletype #f)))
       ((funcall? expression) (M-state-funcall expression state return-func next break continue throw compiletype this_obj))
-      ;((dot? expression) -1) 
       (else error 'unsupported-statement)
     )))
 
@@ -280,15 +276,19 @@ necessary updates to the state, and evaluates to the special variable 'return, o
 
 ; contain the instance's class and a list of instance field VALUES.
 (define create-instance-closure
-  (λ (rt-type state) 
-    (letrec
-      [(classclosure (get-val rt-type state))
-      (funcnames (class-closure-func-names classclosure))
-      (funcclosures (class-closure-func-closures classclosure))
-      (varexprs (class-closure-var-exprs classclosure))
-      (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
-      (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
-      (list rt-type (reverse (vals (firstlayer definedvarstate))) 'instance-closure))))
+  (λ (rt-type state)
+    (if (null? rt-type)
+        '(() () 'instance-closure)
+        (letrec
+            [(classclosure (get-val rt-type state))
+             (superclass (get-super-class classclosure))
+             (superclassclosure (if (null? superclass) superclass (create-instance-closure superclass state)))
+             (funcnames (class-closure-func-names classclosure))
+             (funcclosures (class-closure-func-closures classclosure))
+             (varexprs (class-closure-var-exprs classclosure))
+             (statewithfunc (cons (list funcnames funcclosures) state)) ; add layer with func, when variables refer to func to run
+             (definedvarstate (M-state varexprs (addlayer statewithfunc) (λ (val s) val) (λ (v) v) (λ (v) v) (λ (v) v) (λ (e v) (error 'uncaught-exception)) rt-type '()))]
+          (list rt-type (append (reverse (vals (firstlayer definedvarstate))) (reverse (instance-values (create-instance-closure superclass state)))) 'instance-closure)))))
 
 ; Gets instance of LHS of dot expression
 ; Currently DOES NOT work with static references to classes
