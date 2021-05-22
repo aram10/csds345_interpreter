@@ -1,6 +1,6 @@
 # csds345_interpreter
 
-Interpreter written in Racket for a Java-like language. Semester project for CSDS 345: Programming Language Concepts at Case Western Reserve University.
+Interpreter written in Racket for a Java-like language. Spring 2021 semester project for CSDS 345: Programming Language Concepts at Case Western Reserve University.
 Credit to Dr. Harold Connamacher for the parser.
 
 Teammates:
