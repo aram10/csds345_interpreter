@@ -167,6 +167,7 @@
 (define get-val
   (λ (x state)
     (cond
+      ((null? state) (begin (println x) (error 'var-not-found)))
       ((declared-layer? x (firstlayer state)) (get-val-layer x (firstlayer state)))
       (else (get-val x (restlayers state))))))
 
@@ -178,9 +179,18 @@
       ((eq? (firstvar layer) x) (firstval layer))
       (else (get-val-layer x (restpairs layer))))))
 
+
+
 ; Determined whether a try-catch-finally has a 'finally' expression
 (define hasfinally?
   (λ (expr) (not (null? (car (finny expr))))))
+
+(define has-var
+  (λ (x state)
+    (cond
+      ((null? state) #f)
+      ((declared-layer? x (firstlayer state)) (has-var-layer x (firstlayer state)))
+      (else (has-var x (restlayers state))))))
 
 ; Checks whether or not a binding is present in a specified layer
 (define has-var-layer
@@ -299,9 +309,11 @@
 (define update
   (λ (x v state) (update-cps x v state (λ (q) q))))
 
-; Updates instance fields, works with boxes
+
 (define update-instance-field
   (λ (obj fieldname new-val compiletype state)
+    ; step 1: find class closure
+    ; step 2: instance (A (box val, box val)) class: (() (name1, name2) (expr1, expr2) ....)
     (letrec
       [
          (class-closure (get-val compiletype state))
@@ -352,7 +364,7 @@
 
 
 #|
-TYPES
+owo what's this
 |#
 (define arithmetic?
   (λ (expr)
@@ -404,7 +416,7 @@ TYPES
   (λ (expr) (eq? (operator expr) 'var)))
 
 (define dot?
-  (λ (expr) (eq? (operator expr) 'dot)))
+  (λ (expr) (and (list? expr) (eq? (operator expr) 'dot))))
 
 (define funcall?
   (λ (expression) (eq? (operator expression) 'funcall)))
@@ -450,7 +462,6 @@ TYPES
 
 
 
-
 #|
 MODULAR HELPERS
 |#
@@ -478,7 +489,8 @@ MODULAR HELPERS
 
 (define class-field-index-helper
   (λ (curr-class class-vars field acc state)
-    (cond 
+    (cond
+      ;[(null? ) (begin (println (list curr-class class-vars field acc)) (error 'hit-top-level))]
       [(null? class-vars) (class-field-index-helper (get-super-class (get-val curr-class state)) 
                                                     (class-closure-var-names (get-super-class-closure curr-class state))
                                                     field acc state)]
@@ -511,7 +523,10 @@ MODULAR HELPERS
 ; Checks if a variable is a member of a class
 (define local-var?
   (λ (classname x state)
-    (member? x (class-closure-var-names (get-val classname state)))))
+    (or (member? x (class-closure-var-names (get-val classname state)))
+        (and
+         (not (null? (get-super-class (get-val classname state))))
+         (local-var? (get-super-class (get-val classname state)) x state)))))
     
 
 (define newruntimetype cadr)

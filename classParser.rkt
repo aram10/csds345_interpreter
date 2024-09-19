@@ -364,7 +364,7 @@
           (begin
             (unget-next-symbol)
             (cons 'var lhs))))))
-    
+
 
 ; parse an assignment statement: a left-hand-side followed by an = followed by a value
 
